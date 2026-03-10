@@ -1,0 +1,96 @@
+<%- include('../partials/header') %>
+
+<section class="page-header">
+  <div class="container">
+    <h1><i class="fas fa-suitcase"></i> Travel Packages</h1>
+    <p>All-inclusive packages for the ultimate Bangladesh experience</p>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="packages-grid">
+      <% packages.forEach(pkg => { %>
+      <div class="card pkg-detail-card">
+        <div class="card-img">
+          <img src="<%= pkg.image %>" alt="<%= pkg.name %>" loading="lazy" onerror="this.src='/images/placeholder.jpg'"/>
+          <div class="pkg-price-overlay">
+            <span>From</span>
+            <strong>৳<%= pkg.price.toLocaleString() %></strong>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="pkg-meta">
+            <span><i class="fas fa-map-marker-alt"></i> <%= pkg.destination %></span>
+            <span><i class="fas fa-clock"></i> <%= pkg.duration %></span>
+          </div>
+          <h3><%= pkg.name %></h3>
+          <div class="pkg-footer">
+            <div class="pkg-price-info">
+              <strong>৳<%= pkg.price.toLocaleString() %></strong> per person
+            </div>
+            <div class="pkg-actions">
+              <a href="/packages/<%= pkg.id %>" class="btn-outline">Details</a>
+              <% if (locals.user) { %>
+              <button class="btn-primary" onclick="openPkgBook('<%= pkg.id %>','<%= pkg.name.replace(/'/g,'') %>',<%= pkg.price %>)">Book Package</button>
+              <% } else { %>
+              <a href="/auth/login" class="btn-primary">Login to Book</a>
+              <% } %>
+            </div>
+          </div>
+        </div>
+      </div>
+      <% }) %>
+    </div>
+  </div>
+</section>
+
+<div id="pkgModal" class="modal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3>Book Package</h3>
+      <button onclick="document.getElementById('pkgModal').style.display='none'" class="modal-close">&times;</button>
+    </div>
+    <form action="/book/package" method="POST" class="modal-form js-payment-form">
+      <input type="hidden" name="pkg_id" id="pk_id"/>
+      <input type="hidden" name="pkg_name" id="pk_name_hidden"/>
+      <input type="hidden" name="total_price" id="pk_total"/>
+      <div class="form-group">
+        <label>Package</label>
+        <input type="text" id="pk_display" readonly class="form-control"/>
+      </div>
+      <div class="form-group">
+        <label>Travel Date</label>
+        <input type="date" name="travel_date" class="form-control" required/>
+      </div>
+      <div class="form-group">
+        <label>Number of Persons</label>
+        <input type="number" name="persons" id="pk_persons" value="1" min="1" max="20" class="form-control" oninput="calcPkgPrice()"/>
+      </div>
+      <div class="price-display" id="pkPriceDisplay"></div>
+      <button type="submit" class="btn-primary btn-block">Confirm Booking</button>
+    </form>
+  </div>
+</div>
+<script>
+let pkPrice = 0;
+const today = new Date().toISOString().split('T')[0];
+document.querySelector('[name="travel_date"]').min = today;
+function openPkgBook(id, name, price) {
+  pkPrice = price;
+  document.getElementById('pk_id').value = id;
+  document.getElementById('pk_name_hidden').value = name;
+  document.getElementById('pk_display').value = name;
+  document.getElementById('pkgModal').style.display = 'flex';
+  calcPkgPrice();
+}
+function calcPkgPrice() {
+  const p = parseInt(document.getElementById('pk_persons').value) || 1;
+  const total = p * pkPrice;
+  document.getElementById('pk_total').value = total;
+  document.getElementById('pkPriceDisplay').innerHTML = `৳${pkPrice.toLocaleString()} x ${p} person(s) = <strong>৳${total.toLocaleString()}</strong>`;
+}
+</script>
+
+<%- include('../partials/payment-modal') %>
+<%- include('../partials/footer') %>

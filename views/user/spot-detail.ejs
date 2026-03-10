@@ -1,0 +1,210 @@
+<%- include('../partials/header') %>
+
+<section class="page-header">
+  <div class="container">
+    <a href="/spots" class="btn-back"><i class="fas fa-arrow-left"></i> Back to Spots</a>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="detail-layout">
+      <!-- Main Content -->
+      <div class="detail-main">
+        <div class="detail-hero">
+          <img src="<%= spot.image %>" alt="<%= spot.name %>" onerror="this.src='/images/placeholder.jpg'"/>
+          <div class="detail-hero-overlay">
+            <span class="card-badge"><%= spot.category %></span>
+            <div class="detail-rating"><i class="fas fa-star"></i> <%= spot.rating %> (<%= spot.total_reviews %> reviews)</div>
+          </div>
+        </div>
+
+        <div class="detail-info">
+          <div class="detail-info-header">
+            <div>
+              <h1><%= spot.name %></h1>
+              <p class="detail-location"><i class="fas fa-map-marker-alt"></i> <%= spot.district %>, <%= spot.division %> Division</p>
+            </div>
+            <% if (locals.user) { %>
+            <form action="/spots/<%= spot.id %>/favorite" method="POST">
+              <button type="submit" class="btn-fav <%= isFav ? 'active' : '' %>">
+                <i class="<%= isFav ? 'fas' : 'far' %> fa-heart"></i> <%= isFav ? 'Saved' : 'Save' %>
+              </button>
+            </form>
+            <% } %>
+          </div>
+
+          <div class="info-pills">
+            <span><i class="fas fa-ticket-alt"></i> Entry: <%= spot.entry_fee > 0 ? '৳'+spot.entry_fee : 'Free' %></span>
+            <span><i class="fas fa-sun"></i> Best Time: <%= spot.best_time || 'Year round' %></span>
+            <span><i class="fas fa-users"></i> <%= spot.total_reviews %> Visitors Reviewed</span>
+          </div>
+
+          <p class="detail-desc"><%= spot.description %></p>
+
+          <!-- Weather Widget -->
+          <div class="weather-box" id="weatherBox">
+            <div class="weather-loading"><i class="fas fa-spinner fa-spin"></i> Loading weather for <%= spot.district %>...</div>
+          </div>
+
+          <!-- Nearby Hotels -->
+          <div class="quick-links">
+            <h3>Plan Your Visit</h3>
+            <div class="quick-links-grid">
+              <a href="/hotels?district=<%= spot.district %>" class="quick-link-card">
+                <i class="fas fa-hotel"></i><span>Hotels in <%= spot.district %></span>
+              </a>
+              <a href="/guides" class="quick-link-card">
+                <i class="fas fa-user-tie"></i><span>Hire a Guide</span>
+              </a>
+              <a href="/transport?to=<%= spot.district %>" class="quick-link-card">
+                <i class="fas fa-bus"></i><span>Transport Options</span>
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Reviews -->
+        <div class="reviews-section">
+          <h2>Visitor Reviews</h2>
+          <% if (locals.user) { %>
+          <form action="/spots/<%= spot.id %>/review" method="POST" enctype="multipart/form-data" class="review-form">
+            <div class="star-rating-input">
+              <% for(let i=5;i>=1;i--) { %>
+              <input type="radio" name="rating" value="<%= i %>" id="star<%= i %>"/>
+              <label for="star<%= i %>"><i class="fas fa-star"></i></label>
+              <% } %>
+            </div>
+            <textarea name="comment" placeholder="Share your experience..." required rows="3"></textarea>
+            <input type="file" name="photo" accept=".jpg,.jpeg,.png,.webp,image/*" class="review-photo-input"/>
+            <button type="submit" class="btn-primary">Submit Review</button>
+          </form>
+          <% } else { %>
+          <p class="login-prompt"><a href="/auth/login">Login</a> to write a review.</p>
+          <% } %>
+
+          <div class="reviews-list">
+            <% if (reviews.length === 0) { %>
+            <p class="no-reviews">No reviews yet. Be the first!</p>
+            <% } %>
+            <% reviews.forEach(r => { %>
+            <div class="review-card">
+              <div class="review-header">
+                <div class="review-avatar"><%= r.user_name.charAt(0).toUpperCase() %></div>
+                <div>
+                  <strong><%= r.user_name %></strong>
+                  <div class="stars">
+                    <% for(let i=0;i<r.rating;i++) { %><i class="fas fa-star"></i><% } %>
+                    <% for(let i=r.rating;i<5;i++) { %><i class="far fa-star"></i><% } %>
+                  </div>
+                </div>
+                <span class="review-date"><%= new Date(r.created_at).toLocaleDateString() %></span>
+              </div>
+              <p><%= r.comment %></p>
+              <% if (r.photo) { %>
+              <img src="<%= r.photo %>" alt="Review photo" class="review-photo" onerror="this.style.display='none'"/>
+              <% } %>
+            </div>
+            <% }) %>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Sidebar -->
+      <aside class="detail-sidebar">
+        <div class="sidebar-block">
+          <div class="sidebar-head">
+            <h3><i class="fas fa-hotel"></i> Nearby Hotels</h3>
+            <a href="/hotels?district=<%= encodeURIComponent(spot.district) %>">View all</a>
+          </div>
+          <% if (relatedHotels.length === 0) { %>
+          <p class="sidebar-empty">No hotels found for this area.</p>
+          <% } %>
+          <% relatedHotels.forEach(h => { %>
+          <div class="sidebar-item">
+            <div class="sidebar-item-top">
+              <strong><%= h.name %></strong>
+              <span>à§³<%= h.price_per_night %>/night</span>
+            </div>
+            <p><i class="fas fa-map-marker-alt"></i> <%= h.location %></p>
+            <div class="sidebar-item-actions">
+              <span class="rating"><i class="fas fa-star"></i> <%= h.rating %></span>
+              <a href="/hotels?district=<%= encodeURIComponent(spot.district) %>" class="btn-sm">Book</a>
+            </div>
+          </div>
+          <% }) %>
+        </div>
+
+        <div class="sidebar-block">
+          <div class="sidebar-head">
+            <h3><i class="fas fa-bus"></i> Relevant Transport</h3>
+            <a href="/transport?to=<%= encodeURIComponent(spot.district) %>">View all</a>
+          </div>
+          <% if (relatedTransports.length === 0) { %>
+          <p class="sidebar-empty">No transport found for this route.</p>
+          <% } %>
+          <% relatedTransports.forEach(t => { %>
+          <div class="sidebar-item">
+            <div class="sidebar-item-top">
+              <strong><%= t.type %> - <%= t.company %></strong>
+              <span>à§³<%= t.price %></span>
+            </div>
+            <p><i class="fas fa-route"></i> <%= t.from_location %> &rarr; <%= t.to_location %></p>
+            <div class="sidebar-item-actions">
+              <span><i class="fas fa-chair"></i> <%= t.seats_available %> seats</span>
+              <a href="/transport?to=<%= encodeURIComponent(spot.district) %>" class="btn-sm">Book</a>
+            </div>
+          </div>
+          <% }) %>
+        </div>
+
+        <div class="sidebar-block">
+          <div class="sidebar-head">
+            <h3><i class="fas fa-user-tie"></i> Suggested Guides</h3>
+            <a href="/guides">View all</a>
+          </div>
+          <% if (relatedGuides.length === 0) { %>
+          <p class="sidebar-empty">No guides available now.</p>
+          <% } %>
+          <% relatedGuides.forEach(g => { %>
+          <div class="sidebar-item">
+            <div class="sidebar-item-top">
+              <strong><%= g.name %></strong>
+              <span>à§³<%= g.price_per_day %>/day</span>
+            </div>
+            <p><i class="fas fa-certificate"></i> <%= g.specialty %></p>
+            <div class="sidebar-item-actions">
+              <span class="rating"><i class="fas fa-star"></i> <%= g.rating %></span>
+              <a href="/guides" class="btn-sm">Hire</a>
+            </div>
+          </div>
+          <% }) %>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<script>
+// Load weather
+fetch(`https://wttr.in/<%= encodeURIComponent(spot.district) %>?format=j1`)
+  .then(r => r.json())
+  .then(data => {
+    const w = data.current_condition[0];
+    document.getElementById('weatherBox').innerHTML = `
+      <div class="weather-content">
+        <div class="weather-icon"><i class="fas fa-cloud-sun"></i></div>
+        <div class="weather-data">
+          <h4>Weather in <%= spot.district %></h4>
+          <p class="temp">${w.temp_C}°C / ${w.temp_F}°F</p>
+          <p>${w.weatherDesc[0].value}</p>
+          <p>Humidity: ${w.humidity}% | Wind: ${w.windspeedKmph} km/h</p>
+        </div>
+      </div>
+    `;
+  }).catch(() => {
+    document.getElementById('weatherBox').innerHTML = '<p class="weather-error">Weather data unavailable</p>';
+  });
+</script>
+
+<%- include('../partials/footer') %>

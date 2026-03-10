@@ -1,0 +1,95 @@
+<%- include('./partials/admin-header') %>
+
+<% if (locals.success_msg && success_msg.length) { %>
+<div class="alert alert-success"><%= success_msg[0] %></div>
+<% } %>
+<% if (locals.error_msg && error_msg.length) { %>
+<div class="alert alert-danger"><%= error_msg[0] %></div>
+<% } %>
+
+<div class="admin-card">
+  <div class="admin-card-header">
+    <h3><i class="fas fa-calendar-check"></i> All Bookings (<%= bookings.length %>)</h3>
+  </div>
+  <div class="table-responsive">
+    <table class="admin-table">
+      <thead>
+        <tr><th>#</th><th>User</th><th>Type</th><th>Item</th><th>Date</th><th>Persons</th><th>Amount</th><th>Payment</th><th>Status</th><th>Update</th></tr>
+      </thead>
+      <tbody>
+        <% bookings.forEach((b, i) => { %>
+        <tr>
+          <td><%= i+1 %></td>
+          <td><%= b.user_name %><br/><small><%= b.email %></small></td>
+          <td><span class="badge badge-<%= b.type %>"><%= b.type %></span></td>
+          <td><%= b.item_name %></td>
+          <td><%= b.check_in || '-' %></td>
+          <td><%= b.persons %></td>
+          <td>BDT <%= (b.total_price||0).toLocaleString() %></td>
+          <td>
+            <% if (b.payment_method) { %>
+              <span class="booking-type"><%= b.payment_method.toUpperCase() %></span>
+              <br/>
+              <small><%= b.payment_status || 'paid' %></small>
+              <% if (b.payment_txn_id) { %><br/><small>TrxID: <%= b.payment_txn_id %></small><% } %>
+              <% if (b.payment_number) { %><br/><small>From: <%= b.payment_number %></small><% } %>
+            <% } else { %>
+              <small class="text-muted">N/A</small>
+            <% } %>
+          </td>
+          <td><span class="status-badge status-<%= b.status %>"><%= b.status %></span></td>
+          <td>
+            <form action="/admin/bookings/<%= b.id %>/status" method="POST">
+              <select name="status" onchange="this.form.submit()" class="status-select">
+                <% ['pending','confirmed','cancelled','released'].forEach(s => { %>
+                <option value="<%= s %>" <%= b.status===s?'selected':'' %>><%= s %></option>
+                <% }) %>
+              </select>
+            </form>
+          </td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="admin-card">
+  <div class="admin-card-header">
+    <h3><i class="fas fa-right-left"></i> Pending Exchange Requests (<%= (exchangeRequests || []).length %>)</h3>
+  </div>
+  <div class="table-responsive">
+    <table class="admin-table">
+      <thead>
+        <tr><th>#</th><th>Ticket</th><th>Current Owner</th><th>Requester</th><th>Requested At</th><th>Action</th></tr>
+      </thead>
+      <tbody>
+        <% if (!exchangeRequests || exchangeRequests.length === 0) { %>
+          <tr>
+            <td colspan="6" class="text-muted">No pending exchange request.</td>
+          </tr>
+        <% } else { %>
+          <% exchangeRequests.forEach((r, i) => { %>
+          <tr>
+            <td><%= i+1 %></td>
+            <td>
+              <strong><%= r.item_name %></strong><br/>
+              <small>Date: <%= r.check_in || '-' %>, Seats: <%= r.persons %>, Amount: BDT <%= (r.total_price || 0).toLocaleString() %></small>
+            </td>
+            <td><%= r.current_owner_name %><br/><small><%= r.current_owner_email %></small></td>
+            <td><%= r.requester_name %><br/><small><%= r.requester_email %></small></td>
+            <td><%= r.created_at %></td>
+            <td>
+              <form action="/admin/exchange-requests/<%= r.id %>/approve" method="POST">
+                <button type="submit" class="btn-sm" onclick="return confirm('Admin action is disabled. Continue to show notice?')">Owner Handles</button>
+              </form>
+            </td>
+          </tr>
+          <% }) %>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<%- include('./partials/admin-footer') %>

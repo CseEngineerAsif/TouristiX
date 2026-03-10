@@ -1,0 +1,115 @@
+<%- include('../partials/header') %>
+
+<section class="page-header">
+  <div class="container">
+    <h1><i class="fas fa-hotel"></i> Hotels & Resorts</h1>
+    <p>Curated, verified stays across Bangladesh</p>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <form action="/hotels" method="GET" class="filter-form">
+      <input type="text" name="district" placeholder="Search by district or location..." value="<%= locals.district || '' %>"/>
+      <button type="submit" class="btn-primary"><i class="fas fa-search"></i> Search</button>
+      <a href="/hotels" class="btn-outline">Clear</a>
+    </form>
+
+    <div class="cards-grid">
+      <% hotels.forEach(h => { %>
+      <div class="card hotel-card">
+        <div class="card-img">
+          <img src="<%= h.image %>" alt="<%= h.name %>" loading="lazy" onerror="this.src='/images/placeholder.jpg'"/>
+          <span class="card-badge">৳<%= h.price_per_night.toLocaleString() %>/night</span>
+        </div>
+        <div class="card-body">
+          <div class="card-meta"><i class="fas fa-map-marker-alt"></i> <%= h.location %></div>
+          <h3><%= h.name %></h3>
+          <p><%= h.description.substring(0,80) %>...</p>
+          <div class="facilities-list">
+            <% (h.facilities || '').split(',').filter(Boolean).slice(0,4).forEach(f => { %><span class="facility-tag"><i class="fas fa-check"></i> <%= f.trim() %></span><% }) %>
+          </div>
+          <div class="card-footer">
+            <div class="rating"><i class="fas fa-star"></i> <%= h.rating %></div>
+            <div class="card-actions-row">
+              <a href="/hotels/<%= h.id %>" class="btn-sm-outline">View Details</a>
+              <% if (locals.user) { %>
+              <button class="btn-sm" onclick="openBooking('hotel','<%= h.id %>','<%= h.name.replace(/'/g,'') %>',<%= h.price_per_night %>)">Book Now</button>
+              <% } else { %>
+              <a href="/auth/login" class="btn-sm">Login to Book</a>
+              <% } %>
+            </div>
+          </div>
+        </div>
+      </div>
+      <% }) %>
+    </div>
+  </div>
+</section>
+
+<!-- Booking Modal -->
+<div id="bookModal" class="modal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3>Book Hotel</h3>
+      <button onclick="closeModal()" class="modal-close">&times;</button>
+    </div>
+    <form action="/book/hotel" method="POST" class="modal-form js-payment-form">
+      <input type="hidden" name="hotel_id" id="m_hotel_id"/>
+      <input type="hidden" name="hotel_name" id="m_hotel_name"/>
+      <input type="hidden" name="total_price" id="m_total_price"/>
+      <div class="form-group">
+        <label>Hotel</label>
+        <input type="text" id="m_hotel_display" readonly class="form-control"/>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Check-in</label>
+          <input type="date" name="check_in" id="m_checkin" class="form-control" required/>
+        </div>
+        <div class="form-group">
+          <label>Check-out</label>
+          <input type="date" name="check_out" id="m_checkout" class="form-control" required/>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Persons</label>
+        <input type="number" name="persons" value="1" min="1" max="10" class="form-control" id="m_persons"/>
+      </div>
+      <div class="price-display" id="priceDisplay">Price will be calculated</div>
+      <button type="submit" class="btn-primary btn-block">Confirm Booking</button>
+    </form>
+  </div>
+</div>
+
+<script>
+let hotelPrice = 0;
+function openBooking(type, id, name, price) {
+  hotelPrice = price;
+  document.getElementById('m_hotel_id').value = id;
+  document.getElementById('m_hotel_name').value = name;
+  document.getElementById('m_hotel_display').value = name;
+  document.getElementById('bookModal').style.display = 'flex';
+  updatePrice();
+}
+function closeModal() { document.getElementById('bookModal').style.display = 'none'; }
+function updatePrice() {
+  const ci = document.getElementById('m_checkin').value;
+  const co = document.getElementById('m_checkout').value;
+  if (ci && co) {
+    const nights = Math.max(1, (new Date(co) - new Date(ci)) / 86400000);
+    const total = nights * hotelPrice;
+    document.getElementById('m_total_price').value = total;
+    document.getElementById('priceDisplay').innerHTML = `৳${hotelPrice.toLocaleString()} x ${nights} night(s) = <strong>৳${total.toLocaleString()}</strong>`;
+  }
+}
+document.getElementById('m_checkin').addEventListener('change', updatePrice);
+document.getElementById('m_checkout').addEventListener('change', updatePrice);
+// Set min date to today
+const today = new Date().toISOString().split('T')[0];
+document.getElementById('m_checkin').min = today;
+document.getElementById('m_checkout').min = today;
+</script>
+
+<%- include('../partials/payment-modal') %>
+<%- include('../partials/footer') %>

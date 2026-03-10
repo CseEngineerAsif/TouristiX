@@ -1,0 +1,55 @@
+<%- include('../partials/header') %>
+
+<section class="page-header">
+  <div class="container">
+    <a href="/guides/<%= guide.id %>" class="btn-back"><i class="fas fa-arrow-left"></i> Back to Profile</a>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <% if (locals.success_msg && success_msg.length) { %>
+      <div class="alert alert-success"><%= success_msg[0] %></div>
+    <% } %>
+    <% if (locals.error_msg && error_msg.length) { %>
+      <div class="alert alert-danger"><%= error_msg[0] %></div>
+    <% } %>
+
+    <div class="reviews-section">
+      <div class="detail-info-header">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div class="guide-img-wrap" style="margin:0; width:56px; height:56px;">
+            <img src="<%= guide.image %>" alt="<%= guide.name %>" onerror="this.src='/images/placeholder.jpg'"/>
+          </div>
+          <div>
+            <h2 style="margin:0;">Chat with <%= guide.name %></h2>
+            <p class="muted-text" style="margin:0;"><%= guide.specialty || 'Tour Guide' %></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="guide-chat-box">
+        <% if (!messages.length) { %>
+          <p class="no-reviews">No messages yet. Start the conversation.</p>
+        <% } else { %>
+          <% messages.forEach(m => { %>
+            <div class="chat-row <%= m.sender_role === 'user' ? 'chat-me' : 'chat-guide' %>">
+              <div class="chat-bubble">
+                <div class="chat-meta"><%= m.sender_role === 'user' ? 'You' : guide.name %></div>
+                <p><%= m.message %></p>
+                <small><%= new Date(m.created_at).toLocaleString() %></small>
+              </div>
+            </div>
+          <% }) %>
+        <% } %>
+      </div>
+
+      <form action="/guides/<%= guide.id %>/chat" method="POST" class="chat-form">
+        <textarea name="message" rows="3" placeholder="Type your message..." required></textarea>
+        <button type="submit" class="btn-primary">Send Message</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<%- include('../partials/footer') %>

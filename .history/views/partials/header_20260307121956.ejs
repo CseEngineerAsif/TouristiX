@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title><%= title %> | TouristiX</title>
+  <link rel="stylesheet" href="/css/style.css"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+</head>
+<body>
+<nav class="navbar">
+  <div class="nav-container">
+    <a href="/" class="nav-brand">
+      <i class="fas fa-compass"></i> BanglaTour <span>Pro</span>
+    </a>
+    <button class="nav-toggle" onclick="document.querySelector('.nav-links').classList.toggle('open')">
+      <i class="fas fa-bars"></i>
+    </button>
+    <ul class="nav-links">
+      <li><a href="/" class="<%= title==='Home'?'active':'' %>">Home</a></li>
+      <li><a href="/spots" class="<%= title==='Tourist Spots'?'active':'' %>">Spots</a></li>
+      <li><a href="/hotels" class="<%= title==='Hotels'?'active':'' %>">Hotels</a></li>
+      <li><a href="/transport" class="<%= title==='Transport'?'active':'' %>">Transport</a></li>
+      <li><a href="/guides" class="<%= title==='Guides'?'active':'' %>">Guides</a></li>
+      <li><a href="/packages" class="<%= title==='Travel Packages'?'active':'' %>">Packages</a></li>
+      <% if (locals.user) { %>
+        <li><a href="/dashboard" class="btn-nav">My Dashboard</a></li>
+        <li><a href="/auth/logout">Logout</a></li>
+      <% } else { %>
+        <li><a href="/auth/login" class="btn-nav">Login</a></li>
+      <% } %>
+    </ul>
+  </div>
+</nav>
+<main>

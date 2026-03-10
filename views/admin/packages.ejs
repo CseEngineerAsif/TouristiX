@@ -1,0 +1,59 @@
+<%- include('./partials/admin-header') %>
+
+<div class="admin-card">
+  <div class="admin-card-header">
+    <h3><i class="fas fa-box-open"></i> Packages</h3>
+    <button class="btn-primary" onclick="document.getElementById('addPackageModal').style.display='flex'"><i class="fas fa-plus"></i> Add Package</button>
+  </div>
+  <div class="table-responsive">
+    <table class="admin-table">
+      <thead>
+        <tr><th>Image</th><th>Name</th><th>Destination</th><th>Duration</th><th>Price</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        <% packages.forEach(p => { %>
+        <tr>
+          <td><img src="<%= p.image %>" alt="" style="width:60px;height:40px;object-fit:cover;border-radius:8px" onerror="this.src='/images/placeholder.jpg'"/></td>
+          <td><strong><%= p.name %></strong></td>
+          <td><%= p.destination %></td>
+          <td><%= p.duration || '-' %></td>
+          <td>BDT <%= (p.price || 0).toLocaleString() %></td>
+          <td>
+            <a href="/admin/packages/<%= p.id %>/edit" class="btn-sm"><i class="fas fa-pen"></i></a>
+            <form action="/admin/packages/<%= p.id %>/delete" method="POST" style="display:inline" onsubmit="return confirm('Delete?')">
+              <button type="submit" class="btn-danger-sm"><i class="fas fa-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div id="addPackageModal" class="modal" style="display:none">
+  <div class="modal-box modal-lg">
+    <div class="modal-header">
+      <h3>Add Package</h3>
+      <button onclick="document.getElementById('addPackageModal').style.display='none'" class="modal-close">&times;</button>
+    </div>
+    <form action="/admin/packages/add" method="POST" enctype="multipart/form-data" class="modal-form">
+      <div class="form-row">
+        <div class="form-group"><label>Name</label><input type="text" name="name" required class="form-control"/></div>
+        <div class="form-group"><label>Destination</label><input type="text" name="destination" required class="form-control"/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Duration</label><input type="text" name="duration" placeholder="3 Days 2 Nights" class="form-control"/></div>
+        <div class="form-group"><label>Price (BDT)</label><input type="number" name="price" required class="form-control"/></div>
+      </div>
+      <div class="form-group"><label>Includes</label><input type="text" name="includes" placeholder="Hotel,Transport,Guide" class="form-control"/></div>
+      <div class="form-group"><label>Max Persons</label><input type="number" name="max_persons" value="20" class="form-control"/></div>
+      <div class="form-group"><label>Description</label><textarea name="description" rows="3" class="form-control"></textarea></div>
+      <div class="form-group"><label>Upload Image</label><input type="file" name="image" accept="image/*" class="form-control"/></div>
+      <div class="form-group"><label>Or Image URL</label><input type="url" name="image_url" placeholder="https://..." class="form-control"/></div>
+      <button type="submit" class="btn-primary btn-block">Add Package</button>
+    </form>
+  </div>
+</div>
+
+<%- include('./partials/admin-footer') %>

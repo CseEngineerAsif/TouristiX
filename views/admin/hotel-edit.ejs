@@ -1,0 +1,34 @@
+<%- include('./partials/admin-header') %>
+
+<div class="admin-card">
+  <div class="admin-card-header">
+    <h3><i class="fas fa-pen"></i> Edit Hotel</h3>
+    <a href="/admin/hotels" class="btn-outline"><i class="fas fa-arrow-left"></i> Back</a>
+  </div>
+  <form action="/admin/hotels/<%= hotel.id %>/edit" method="POST" enctype="multipart/form-data" class="modal-form">
+    <input type="hidden" name="current_image" value="<%= hotel.image %>"/>
+    <div class="form-row">
+      <div class="form-group"><label>Hotel Name</label><input type="text" name="name" required class="form-control" value="<%= hotel.name %>"/></div>
+      <div class="form-group"><label>District</label><input type="text" name="district" required class="form-control" value="<%= hotel.district %>"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Location/Area</label><input type="text" name="location" required class="form-control" value="<%= hotel.location %>"/></div>
+      <div class="form-group"><label>Price/Night (BDT)</label><input type="number" name="price_per_night" required class="form-control" value="<%= hotel.price_per_night %>"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Rating</label><input type="number" name="rating" min="0" max="5" step="0.1" class="form-control" value="<%= hotel.rating %>"/></div>
+      <div class="form-group"><label>Total Rooms</label><input type="number" name="total_rooms" class="form-control" value="<%= hotel.total_rooms %>"/></div>
+    </div>
+    <div class="form-group"><label>Available Rooms</label><input type="number" name="available_rooms" class="form-control" value="<%= hotel.available_rooms %>"/></div>
+    <div class="form-group"><label>Facilities (comma separated)</label><input type="text" name="facilities" class="form-control" value="<%= hotel.facilities || '' %>"/></div>
+    <div class="form-group"><label>Description</label><textarea name="description" rows="4" class="form-control"><%= hotel.description || '' %></textarea></div>
+    <div class="form-group">
+      <label>Current Image</label>
+      <img src="<%= hotel.image %>" alt="" style="width:200px;height:120px;object-fit:cover;border-radius:10px;border:1px solid #ddd" onerror="this.src='/images/placeholder.jpg'"/>
+    </div>
+    <div class="form-group"><label>Upload New Image</label><input type="file" name="image" accept="image/*" class="form-control"/></div>
+    <button type="submit" class="btn-primary">Update Hotel</button>
+  </form>
+</div>
+
+<%- include('./partials/admin-footer') %>

@@ -1,0 +1,139 @@
+<%- include('../partials/header') %>
+
+<section class="page-header">
+  <div class="container">
+    <a href="/guides" class="btn-back"><i class="fas fa-arrow-left"></i> Back to Guides</a>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="detail-layout">
+      <div class="detail-main">
+        <div class="detail-info">
+          <div class="detail-info-header">
+            <div style="display:flex; align-items:center; gap:14px;">
+              <div class="guide-img-wrap" style="margin:0; width:88px; height:88px;">
+                <img src="<%= guide.image %>" alt="<%= guide.name %>" onerror="this.src='/images/placeholder.jpg'"/>
+              </div>
+              <div>
+                <h1><%= guide.name %></h1>
+                <p class="detail-location"><i class="fas fa-certificate"></i> <%= guide.specialty || 'Tour Guide' %></p>
+              </div>
+            </div>
+            <% if (locals.user) { %>
+            <div class="guide-actions">
+              <a href="/guides/<%= guide.id %>/chat" class="btn-outline">Chat</a>
+              <button class="btn-primary" onclick="openGuideBook('<%= guide.id %>','<%= guide.name %>',<%= guide.price_per_day %>)">
+                <i class="fas fa-user-check"></i> Hire Guide
+              </button>
+            </div>
+            <% } else { %>
+            <a href="/auth/login" class="btn-primary">Login to Hire</a>
+            <% } %>
+          </div>
+
+          <div class="info-pills">
+            <span><i class="fas fa-star"></i> Rating: <%= guide.rating %></span>
+            <span><i class="fas fa-clock"></i> Experience: <%= guide.experience || 'N/A' %></span>
+            <span><i class="fas fa-coins"></i> &#2547;<%= Number(guide.price_per_day || 0).toLocaleString() %> / day</span>
+          </div>
+
+          <div class="reviews-section">
+            <h2><i class="fas fa-language"></i> Languages</h2>
+            <div class="languages">
+              <% (guide.languages || '').split(',').map(l => l.trim()).filter(Boolean).forEach(l => { %>
+              <span class="lang-tag"><%= l %></span>
+              <% }) %>
+            </div>
+          </div>
+
+          <div class="reviews-section" style="margin-top:16px;">
+            <h2><i class="fas fa-user-edit"></i> Profile</h2>
+            <p class="detail-desc"><%= guide.bio || 'No profile details available.' %></p>
+            <% if (guide.phone) { %>
+            <p class="muted-text"><i class="fas fa-phone"></i> Contact: <%= guide.phone %></p>
+            <% } %>
+          </div>
+        </div>
+      </div>
+
+      <aside class="detail-sidebar">
+        <div class="sidebar-block">
+          <div class="sidebar-head">
+            <h3><i class="fas fa-users"></i> Other Guides</h3>
+            <a href="/guides">View all</a>
+          </div>
+          <% if (!relatedGuides.length) { %>
+          <p class="sidebar-empty">No other guides available now.</p>
+          <% } %>
+          <% relatedGuides.forEach(g => { %>
+          <div class="sidebar-item">
+            <div class="sidebar-item-top">
+              <strong><%= g.name %></strong>
+              <span>&#2547;<%= Number(g.price_per_day || 0).toLocaleString() %>/day</span>
+            </div>
+            <p><i class="fas fa-certificate"></i> <%= g.specialty %></p>
+            <div class="sidebar-item-actions">
+              <span class="rating"><i class="fas fa-star"></i> <%= g.rating %></span>
+              <a href="/guides/<%= g.id %>" class="btn-sm">View</a>
+            </div>
+          </div>
+          <% }) %>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<div id="guideModal" class="modal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3>Hire Guide</h3>
+      <button onclick="document.getElementById('guideModal').style.display='none'" class="modal-close">&times;</button>
+    </div>
+    <form action="/book/guide" method="POST" class="modal-form js-payment-form">
+      <input type="hidden" name="guide_id" id="g_id"/>
+      <input type="hidden" name="guide_name" id="g_name_hidden"/>
+      <input type="hidden" name="total_price" id="g_total"/>
+      <div class="form-group">
+        <label>Guide</label>
+        <input type="text" id="g_display" readonly class="form-control"/>
+      </div>
+      <div class="form-group">
+        <label>Start Date</label>
+        <input type="date" name="start_date" class="form-control" required/>
+      </div>
+      <div class="form-group">
+        <label>Number of Days</label>
+        <input type="number" name="days" id="g_days" value="1" min="1" max="30" class="form-control" oninput="calcGuidePrice()"/>
+      </div>
+      <div class="price-display" id="gPriceDisplay"></div>
+      <button type="submit" class="btn-primary btn-block">Confirm Hiring</button>
+    </form>
+  </div>
+</div>
+
+<script>
+let gPrice = 0;
+const today = new Date().toISOString().split('T')[0];
+document.querySelector('[name="start_date"]').min = today;
+function openGuideBook(id, name, price) {
+  gPrice = price;
+  document.getElementById('g_id').value = id;
+  document.getElementById('g_name_hidden').value = name;
+  document.getElementById('g_display').value = name;
+  document.getElementById('guideModal').style.display = 'flex';
+  calcGuidePrice();
+}
+function calcGuidePrice() {
+  const d = parseInt(document.getElementById('g_days').value) || 1;
+  const total = d * gPrice;
+  document.getElementById('g_total').value = total;
+  document.getElementById('gPriceDisplay').innerHTML = `&#2547;${gPrice} x ${d} day(s) = <strong>&#2547;${total}</strong>`;
+}
+</script>
+
+<%- include('../partials/payment-modal') %>
+<%- include('../partials/footer') %>
+

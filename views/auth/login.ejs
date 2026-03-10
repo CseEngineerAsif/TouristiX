@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Login | TouristiX</title>
+  <link rel="stylesheet" href="/css/style.css"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+</head>
+<body class="auth-page">
+<div class="auth-container">
+  <div class="auth-left">
+    <div class="auth-left-content">
+      <a href="/" class="auth-brand"><i class="fas fa-compass"></i> TouristiX</a>
+      <h2>Explore Beautiful Bangladesh</h2>
+      <p>From the world's longest sea beach to the largest mangrove forest.</p>
+      <div class="auth-features">
+        <div><i class="fas fa-check"></i> Book hotels & transport</div>
+        <div><i class="fas fa-check"></i> Hire expert guides</div>
+        <div><i class="fas fa-check"></i> Save favorite spots</div>
+        <div><i class="fas fa-check"></i> Manage all bookings</div>
+      </div>
+    </div>
+  </div>
+  <div class="auth-right">
+    <div class="auth-form-container">
+      <h2>Welcome Back</h2>
+      <p>Sign in to your TouristiX account</p>
+      <% if (error && error.length > 0) { %><div class="alert alert-danger"><%= error %></div><% } %>
+      <% if (success && success.length > 0) { %><div class="alert alert-success"><%= success %></div><% } %>
+      <form action="/auth/login" method="POST" class="auth-form">
+        <div class="form-group">
+          <label><i class="fas fa-envelope"></i> Gmail</label>
+          <input type="email" name="email" placeholder="your@gmail.com" required class="form-control"/>
+        </div>
+        <div class="form-group">
+          <label><i class="fas fa-lock"></i> Password</label>
+          <input type="password" name="password" placeholder="Enter your password" required class="form-control"/>
+        </div>
+        <button type="submit" class="btn-primary btn-block">Sign In</button>
+      </form>
+      <p class="auth-switch">Don't have an account? <a href="/auth/register">Register</a></p>
+      <div class="admin-hint">
+        <small><i class="fas fa-info-circle"></i> Admin: admin@touristix.com / admin123</small>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,169 @@
+<%- include('../partials/header') %>
+
+<section class="page-header">
+  <div class="container">
+    <h1><i class="fas fa-tachometer-alt"></i> My Dashboard</h1>
+    <p>Welcome back, <%= user.name %>!</p>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <% if (locals.success_msg) { %><div class="alert alert-success"><%= success_msg %></div><% } %>
+    <% if (locals.error_msg) { %><div class="alert alert-danger"><%= error_msg %></div><% } %>
+
+    <div class="dashboard-tabs">
+      <button class="tab-btn active" onclick="showTab('bookings', this)"><i class="fas fa-calendar-check"></i> My Bookings (<%= bookings.length %>)</button>
+      <button class="tab-btn" onclick="showTab('favorites', this)"><i class="fas fa-heart"></i> Saved Spots (<%= favorites.length %>)</button>
+      <button class="tab-btn" onclick="showTab('profile', this)"><i class="fas fa-user-circle"></i> Profile</button>
+    </div>
+
+    <!-- Bookings Tab -->
+    <div id="bookings-tab" class="tab-content active">
+      <% if (bookings.length === 0) { %>
+      <div class="empty-state">
+        <i class="fas fa-calendar-times"></i>
+        <h3>No bookings yet</h3>
+        <p>Explore our destinations and make your first booking!</p>
+        <a href="/spots" class="btn-primary">Explore Spots</a>
+      </div>
+      <% } else { %>
+      <div class="bookings-list">
+        <% bookings.forEach(b => { %>
+        <div class="booking-card status-<%= b.status %>">
+          <div class="booking-icon">
+            <% if(b.type==='hotel') { %><i class="fas fa-hotel"></i>
+            <% } else if(b.type==='transport') { %><i class="fas fa-bus"></i>
+            <% } else if(b.type==='guide') { %><i class="fas fa-user-tie"></i>
+            <% } else { %><i class="fas fa-suitcase"></i><% } %>
+          </div>
+          <div class="booking-info">
+            <h4><%= b.item_name %></h4>
+            <p><span class="booking-type"><%= b.type.toUpperCase() %></span></p>
+            <% if(b.check_in) { %><p><i class="fas fa-calendar"></i> <%= b.check_in %><% if(b.check_out) { %> → <%= b.check_out %><% } %></p><% } %>
+            <p><i class="fas fa-users"></i> <%= b.persons %> person(s)</p>
+            <% if (b.payment_method) { %>
+            <p><i class="fas fa-wallet"></i> Payment: <%= b.payment_method.toUpperCase() %> (<%= b.payment_status || 'paid' %>)</p>
+            <% if (b.payment_txn_id) { %><p><i class="fas fa-hashtag"></i> TrxID: <%= b.payment_txn_id %></p><% } %>
+            <% } %>
+          </div>
+          <div class="booking-price-status">
+            <div class="booking-price">৳<%= (b.total_price||0).toLocaleString() %></div>
+            <span class="status-badge status-<%= b.status %>"><%= b.status %></span>
+            <% if(b.status === 'pending' && !b.exchange_locked) { %>
+            <form action="/bookings/<%= b.id %>/cancel" method="POST" style="margin-top:8px">
+              <button type="submit" class="btn-danger-sm" onclick="return confirm('Cancel this booking?')">Cancel</button>
+            </form>
+            <% } else if (b.status === 'pending' && b.exchange_locked) { %>
+            <small class="muted-text">Exchanged ticket: user cannot cancel</small>
+            <% } %>
+          </div>
+        </div>
+        <% }) %>
+      </div>
+      <% } %>
+    </div>
+
+    <!-- Favorites Tab -->
+    <div id="favorites-tab" class="tab-content">
+      <% if (favorites.length === 0) { %>
+      <div class="empty-state">
+        <i class="far fa-heart"></i>
+        <h3>No saved spots</h3>
+        <p>Save your favourite spots to revisit them easily.</p>
+        <a href="/spots" class="btn-primary">Browse Spots</a>
+      </div>
+      <% } else { %>
+      <div class="cards-grid">
+        <% favorites.forEach(f => { %>
+        <div class="card">
+          <div class="card-img">
+            <img src="<%= f.image %>" alt="<%= f.name %>" onerror="this.src='/images/placeholder.jpg'"/>
+          </div>
+          <div class="card-body">
+            <div class="card-meta"><i class="fas fa-map-marker-alt"></i> <%= f.district %></div>
+            <h3><%= f.name %></h3>
+            <div class="card-footer">
+              <a href="/spots/<%= f.spot_id %>" class="btn-sm">View</a>
+              <form action="/spots/<%= f.spot_id %>/favorite" method="POST" style="display:inline">
+                <button type="submit" class="btn-danger-sm">Remove</button>
+              </form>
+            </div>
+          </div>
+        </div>
+        <% }) %>
+      </div>
+      <% } %>
+    </div>
+
+    <!-- Profile Tab -->
+    <div id="profile-tab" class="tab-content">
+      <% if (!profile) { %>
+      <div class="empty-state">
+        <i class="fas fa-user-slash"></i>
+        <h3>Profile not found</h3>
+        <p>Could not load your profile information.</p>
+      </div>
+      <% } else { %>
+      <div class="profile-layout">
+        <div class="card profile-photo-card">
+          <div class="card-body">
+            <div class="profile-avatar-wrap">
+              <% if (profile.avatar) { %>
+                <img src="<%= profile.avatar %>" alt="<%= profile.name %>" class="profile-avatar" onerror="this.src='/images/placeholder.jpg'"/>
+              <% } else { %>
+                <div class="profile-avatar profile-avatar-fallback"><%= (profile.name || 'U').charAt(0).toUpperCase() %></div>
+              <% } %>
+            </div>
+            <h4><%= profile.name %></h4>
+            <p class="muted-text"><%= profile.email %></p>
+            <form action="/dashboard/profile/photo" method="POST" enctype="multipart/form-data" class="profile-photo-form">
+              <label class="form-group">
+                <span class="form-label">Add / Change Photo</span>
+                <input type="file" name="avatar" accept=".jpg,.jpeg,.png,.webp" class="form-control" required>
+              </label>
+              <button type="submit" class="btn-primary btn-block"><i class="fas fa-image"></i> Upload Photo</button>
+            </form>
+            <small class="muted-text">Allowed: JPG, JPEG, PNG, WEBP (max 2MB).</small>
+          </div>
+        </div>
+
+        <div class="card profile-info-card">
+          <div class="card-body">
+            <h3 class="profile-title"><i class="fas fa-id-badge"></i> User Information</h3>
+            <div class="profile-info-grid">
+              <div class="profile-info-item"><span>Full Name</span><strong><%= profile.name %></strong></div>
+              <div class="profile-info-item"><span>Email</span><strong><%= profile.email %></strong></div>
+              <div class="profile-info-item"><span>Phone</span><strong><%= profile.phone || 'N/A' %></strong></div>
+              <div class="profile-info-item"><span>Address</span><strong><%= profile.address || 'N/A' %></strong></div>
+              <div class="profile-info-item"><span>ID Type</span><strong><%= profile.id_type || 'N/A' %></strong></div>
+              <div class="profile-info-item">
+                <span>ID Document</span>
+                <strong>
+                <% if (profile.id_document) { %>
+                  <a href="<%= profile.id_document %>" target="_blank" rel="noopener" class="btn-sm-outline">View Document</a>
+                <% } else { %>
+                  N/A
+                <% } %>
+                </strong>
+              </div>
+              <div class="profile-info-item"><span>Registered At</span><strong><%= profile.created_at %></strong></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <% } %>
+    </div>
+  </div>
+</section>
+
+<script>
+function showTab(name, tabBtn) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(name+'-tab').classList.add('active');
+  tabBtn.classList.add('active');
+}
+</script>
+
+<%- include('../partials/footer') %>

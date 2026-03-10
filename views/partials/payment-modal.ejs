@@ -1,0 +1,151 @@
+<div id="paymentModal" class="modal" style="display:none">
+  <div class="modal-box payment-modal-box">
+    <div class="modal-header">
+      <h3><i class="fas fa-shield-check"></i> Secure Payment Gateway</h3>
+      <button type="button" onclick="closePaymentModal()" class="modal-close">&times;</button>
+    </div>
+    <div class="modal-form payment-modal-content">
+      <div class="gateway-summary">
+        <div>
+          <small>Merchant</small>
+          <strong>BanglaTour Travel Services</strong>
+        </div>
+        <div class="gateway-amount">
+          <small>Payable</small>
+          <strong id="gatewayPayableAmount">BDT 0</strong>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Select Gateway</label>
+        <div class="payment-options">
+          <button type="button" class="payment-option payment-bkash" data-method="bkash">
+            <span class="payment-name">bKash</span>
+            <small>Merchant: 01753340968</small>
+          </button>
+          <button type="button" class="payment-option payment-nagad" data-method="nagad">
+            <span class="payment-name">Nagad</span>
+            <small>Merchant: 01753340968</small>
+          </button>
+        </div>
+      </div>
+
+      <div class="gateway-instructions" id="gatewayInstructions">
+        <h4>How to pay</h4>
+        <ol>
+          <li>Open your mobile banking app.</li>
+          <li>Send money to the merchant number shown above.</li>
+          <li>Enter your wallet number and transaction ID below.</li>
+        </ol>
+      </div>
+
+      <div class="form-group">
+        <label>Your Payment Number</label>
+        <input type="text" id="gatewayPayerNumber" class="form-control" placeholder="e.g. 01712345678"/>
+      </div>
+
+      <div class="form-group">
+        <label>Transaction ID (TrxID)</label>
+        <input type="text" id="gatewayTxnId" class="form-control" placeholder="e.g. 9H2D7K1P"/>
+      </div>
+
+      <p class="muted-text gateway-note">
+        By confirming, you declare this payment information is valid.
+      </p>
+
+      <button type="button" class="btn-primary btn-block" onclick="confirmGatewayPayment()">
+        Confirm and Complete Booking
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  let pendingPaymentForm = null;
+  let selectedMethod = '';
+
+  window.closePaymentModal = function closePaymentModal() {
+    const modal = document.getElementById('paymentModal');
+    if (modal) modal.style.display = 'none';
+    pendingPaymentForm = null;
+    selectedMethod = '';
+    const numInput = document.getElementById('gatewayPayerNumber');
+    const txnInput = document.getElementById('gatewayTxnId');
+    if (numInput) numInput.value = '';
+    if (txnInput) txnInput.value = '';
+    document.querySelectorAll('.payment-option').forEach((btn) => btn.classList.remove('selected'));
+  };
+
+  function setHiddenValue(form, key, value) {
+    let input = form.querySelector(`input[name="${key}"]`);
+    if (!input) {
+      input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = key;
+      form.appendChild(input);
+    }
+    input.value = value;
+  }
+
+  function getTotalAmount(form) {
+    const totalInput = form.querySelector('input[name="total_price"]');
+    const amount = Number(totalInput ? totalInput.value : 0);
+    return Number.isFinite(amount) ? amount : 0;
+  }
+
+  function updatePayableAmount(form) {
+    const el = document.getElementById('gatewayPayableAmount');
+    if (!el) return;
+    const amount = getTotalAmount(form);
+    el.textContent = `BDT ${amount.toLocaleString()}`;
+  }
+
+  function selectGateway(method) {
+    selectedMethod = method;
+    document.querySelectorAll('.payment-option').forEach((btn) => {
+      btn.classList.toggle('selected', btn.dataset.method === method);
+    });
+  }
+
+  window.confirmGatewayPayment = function confirmGatewayPayment() {
+    if (!pendingPaymentForm) return;
+    if (!selectedMethod) return alert('Please select bKash or Nagad.');
+
+    const payerNumber = (document.getElementById('gatewayPayerNumber')?.value || '').trim();
+    const txnId = (document.getElementById('gatewayTxnId')?.value || '').trim().toUpperCase();
+
+    if (!/^(?:\+?88)?01[3-9]\d{8}$/.test(payerNumber.replace(/\s+/g, ''))) {
+      return alert('Enter a valid Bangladesh mobile payment number.');
+    }
+    if (!/^[A-Z0-9]{8,20}$/.test(txnId)) {
+      return alert('Enter a valid transaction ID (8-20 letters/numbers).');
+    }
+
+    setHiddenValue(pendingPaymentForm, 'payment_method', selectedMethod);
+    setHiddenValue(pendingPaymentForm, 'payment_number', payerNumber);
+    setHiddenValue(pendingPaymentForm, 'payment_txn_id', txnId);
+
+    const formToSubmit = pendingPaymentForm;
+    closePaymentModal();
+    formToSubmit.submit();
+  };
+
+  document.querySelectorAll('.payment-option').forEach((btn) => {
+    btn.addEventListener('click', () => selectGateway(btn.dataset.method));
+  });
+
+  document.querySelectorAll('form.js-payment-form').forEach((form) => {
+    form.addEventListener('submit', (event) => {
+      const selectedMethod = (form.querySelector('input[name="payment_method"]') || {}).value;
+      if (selectedMethod) return;
+
+      event.preventDefault();
+      pendingPaymentForm = form;
+      updatePayableAmount(form);
+      const modal = document.getElementById('paymentModal');
+      if (modal) modal.style.display = 'flex';
+    });
+  });
+})();
+</script>

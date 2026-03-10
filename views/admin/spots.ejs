@@ -1,0 +1,76 @@
+<%- include('./partials/admin-header') %>
+
+<div class="admin-card">
+  <div class="admin-card-header">
+    <h3><i class="fas fa-map-marker-alt"></i> Tourist Spots</h3>
+    <button class="btn-primary" onclick="document.getElementById('addSpotModal').style.display='flex'"><i class="fas fa-plus"></i> Add Spot</button>
+  </div>
+  <div class="table-responsive">
+    <table class="admin-table">
+      <thead>
+        <tr><th>Image</th><th>Name</th><th>District</th><th>Category</th><th>Rating</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        <% spots.forEach(s => { %>
+        <tr>
+          <td><img src="<%= s.image %>" alt="" style="width:60px;height:40px;object-fit:cover;border-radius:8px" onerror="this.src='/images/placeholder.jpg'"/></td>
+          <td><strong><%= s.name %></strong></td>
+          <td><%= s.district %></td>
+          <td><span class="badge badge-category"><%= s.category %></span></td>
+          <td><i class="fas fa-star" style="color:#f59e0b"></i> <%= s.rating %></td>
+          <td>
+            <a href="/admin/spots/<%= s.id %>/edit" class="btn-sm"><i class="fas fa-edit"></i> Edit</a>
+            <form action="/admin/spots/<%= s.id %>/delete" method="POST" style="display:inline" onsubmit="return confirm('Delete?')">
+              <button type="submit" class="btn-danger-sm"><i class="fas fa-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Add Spot Modal -->
+<div id="addSpotModal" class="modal" style="display:none">
+  <div class="modal-box modal-lg">
+    <div class="modal-header">
+      <h3>Add Tourist Spot</h3>
+      <button onclick="document.getElementById('addSpotModal').style.display='none'" class="modal-close">&times;</button>
+    </div>
+    <form action="/admin/spots/add" method="POST" enctype="multipart/form-data" class="modal-form">
+      <div class="form-row">
+        <div class="form-group"><label>Name</label><input type="text" name="name" required class="form-control"/></div>
+        <div class="form-group"><label>District</label><input type="text" name="district" required class="form-control"/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Division</label>
+          <select name="division" class="form-control">
+            <% ['Chittagong','Dhaka','Sylhet','Khulna','Rajshahi','Barisal','Rangpur','Mymensingh'].forEach(d => { %>
+            <option value="<%= d %>"><%= d %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Category</label>
+          <select name="category" class="form-control">
+            <% ['Beach','Hill','Forest','Heritage','Island','Garden','Lake','River'].forEach(c => { %>
+            <option value="<%= c %>"><%= c %></option>
+            <% }) %>
+          </select>
+        </div>
+      </div>
+      <div class="form-group"><label>Description</label><textarea name="description" rows="3" class="form-control desc-justify"></textarea></div>
+      <div class="form-row">
+        <div class="form-group"><label>Entry Fee (৳)</label><input type="number" name="entry_fee" value="0" class="form-control"/></div>
+        <div class="form-group"><label>Best Time to Visit</label><input type="text" name="best_time" placeholder="e.g. October to March" class="form-control"/></div>
+      </div>
+      <div class="form-group"><label>Upload Image</label><input type="file" name="image" accept="image/*" class="form-control"/></div>
+      <div class="form-group"><label>Or Image URL</label><input type="url" name="image_url" placeholder="https://..." class="form-control"/></div>
+      <button type="submit" class="btn-primary btn-block">Add Spot</button>
+    </form>
+  </div>
+</div>
+
+<%- include('./partials/admin-footer') %>

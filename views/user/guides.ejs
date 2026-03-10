@@ -1,0 +1,96 @@
+<%- include('../partials/header') %>
+
+<section class="page-header">
+  <div class="container">
+    <h1><i class="fas fa-user-tie"></i> Expert Guides</h1>
+    <p>Hire certified local guides for an authentic experience</p>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="cards-grid">
+      <% guides.forEach(g => { %>
+      <div class="card guide-card">
+        <div class="guide-img-wrap">
+          <img src="<%= g.image %>" alt="<%= g.name %>" loading="lazy" onerror="this.src='/images/placeholder.jpg'"/>
+          <div class="guide-rating"><i class="fas fa-star"></i> <%= g.rating %></div>
+        </div>
+        <div class="card-body">
+          <h3><%= g.name %></h3>
+          <p class="guide-specialty"><i class="fas fa-certificate"></i> <%= g.specialty %></p>
+          <p class="guide-exp"><i class="fas fa-clock"></i> <%= g.experience %> Experience</p>
+          <div class="card-footer">
+            <div class="price">&#2547;<%= g.price_per_day.toLocaleString() %>/day</div>
+            <div class="guide-actions">
+              <a href="/guides/<%= g.id %>" class="btn-outline">Profile</a>
+              <% if (locals.user) { %>
+              <a href="/guides/<%= g.id %>/chat" class="btn-outline">Chat</a>
+              <% } else { %>
+              <a href="/auth/login" class="btn-outline">Login to Chat</a>
+              <% } %>
+              <% if (locals.user) { %>
+              <button class="btn-sm" onclick="openGuideBook('<%= g.id %>','<%= g.name %>',<%= g.price_per_day %>)">Hire Guide</button>
+              <% } else { %>
+              <a href="/auth/login" class="btn-sm">Login to Hire</a>
+              <% } %>
+            </div>
+          </div>
+        </div>
+      </div>
+      <% }) %>
+    </div>
+  </div>
+</section>
+
+<div id="guideModal" class="modal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3>Hire Guide</h3>
+      <button onclick="document.getElementById('guideModal').style.display='none'" class="modal-close">&times;</button>
+    </div>
+    <form action="/book/guide" method="POST" class="modal-form js-payment-form">
+      <input type="hidden" name="guide_id" id="g_id"/>
+      <input type="hidden" name="guide_name" id="g_name_hidden"/>
+      <input type="hidden" name="total_price" id="g_total"/>
+      <div class="form-group">
+        <label>Guide</label>
+        <input type="text" id="g_display" readonly class="form-control"/>
+      </div>
+      <div class="form-group">
+        <label>Start Date</label>
+        <input type="date" name="start_date" class="form-control" required/>
+      </div>
+      <div class="form-group">
+        <label>Number of Days</label>
+        <input type="number" name="days" id="g_days" value="1" min="1" max="30" class="form-control" oninput="calcGuidePrice()"/>
+      </div>
+      <div class="price-display" id="gPriceDisplay"></div>
+      <button type="submit" class="btn-primary btn-block">Confirm Hiring</button>
+    </form>
+  </div>
+</div>
+
+<script>
+let gPrice = 0;
+const today = new Date().toISOString().split('T')[0];
+document.querySelector('[name="start_date"]').min = today;
+function openGuideBook(id, name, price) {
+  gPrice = price;
+  document.getElementById('g_id').value = id;
+  document.getElementById('g_name_hidden').value = name;
+  document.getElementById('g_display').value = name;
+  document.getElementById('guideModal').style.display = 'flex';
+  calcGuidePrice();
+}
+function calcGuidePrice() {
+  const d = parseInt(document.getElementById('g_days').value) || 1;
+  const total = d * gPrice;
+  document.getElementById('g_total').value = total;
+  document.getElementById('gPriceDisplay').innerHTML = `&#2547;${gPrice} x ${d} day(s) = <strong>&#2547;${total}</strong>`;
+}
+</script>
+
+<%- include('../partials/payment-modal') %>
+<%- include('../partials/footer') %>
+

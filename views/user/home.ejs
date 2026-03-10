@@ -1,0 +1,138 @@
+<%- include('../partials/header') %>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-overlay"></div>
+  <div class="hero-content">
+    <span class="hero-badge">🇧🇩 Explore Bangladesh</span>
+    <h1>Discover the <span class="hero-heart">Heart</span> of <span class="hero-country">Bangladesh</span></h1>
+    <p>From the world's longest sea beach to the largest mangrove forest — experience the delta like never before.</p>
+    <form action="/spots" method="GET" class="hero-search">
+      <input type="text" name="search" placeholder="Search destinations, spots, districts..." />
+      <select name="category" aria-label="Select category">
+        <option value="">All Categories</option>
+        <% ['Beach','Hill','Forest','Heritage','Island','Garden','Lake'].forEach(c => { %>
+        <option value="<%= c %>"><%= c %></option>
+        <% }) %>
+      </select>
+      <select name="division" aria-label="Select division">
+        <option value="">All Divisions</option>
+        <% ['Chittagong','Dhaka','Sylhet','Khulna','Rajshahi','Barisal','Rangpur','Mymensingh'].forEach(d => { %>
+        <option value="<%= d %>"><%= d %></option>
+        <% }) %>
+      </select>
+      <div class="hero-search-actions">
+        <button type="submit"><i class="fas fa-search"></i> Search</button>
+        <a href="/spots" class="btn-outline hero-view-btn"><i class="fas fa-list"></i> View All Tourist Spots</a>
+      </div>
+    </form>
+    <div class="hero-stats">
+      <div><span>64</span><small>Districts</small></div>
+      <div><span>500+</span><small>Attractions</small></div>
+      <div><span>10K+</span><small>Travelers</small></div>
+    </div>
+  </div>
+</section>
+
+<!-- Categories -->
+<section class="section">
+  <div class="container">
+    <h2 class="section-title">Explore by Category</h2>
+    <div class="categories-grid">
+      <a href="/spots?category=Beach" class="cat-card" style="background: linear-gradient(135deg,#0077b6,#00b4d8)">
+        <span class="cat-icon"><i class="fas fa-umbrella-beach"></i></span><span>Beach</span>
+      </a>
+      <a href="/spots?category=Hill" class="cat-card" style="background: linear-gradient(135deg,#2d6a4f,#52b788)">
+        <span class="cat-icon"><i class="fas fa-mountain"></i></span><span>Hills</span>
+      </a>
+      <a href="/spots?category=Forest" class="cat-card" style="background: linear-gradient(135deg,#386641,#6a994e)">
+        <span class="cat-icon"><i class="fas fa-tree"></i></span><span>Forest</span>
+      </a>
+      <a href="/spots?category=Heritage" class="cat-card" style="background: linear-gradient(135deg,#7b2d8b,#a855f7)">
+        <span class="cat-icon"><i class="fas fa-monument"></i></span><span>Heritage</span>
+      </a>
+      <a href="/spots?category=Island" class="cat-card" style="background: linear-gradient(135deg,#0096c7,#48cae4)">
+        <span class="cat-icon"><i class="fas fa-person-swimming"></i></span><span>Islands</span>
+      </a>
+      <a href="/spots?category=Garden" class="cat-card" style="background: linear-gradient(135deg,#606c38,#a7c957)">
+        <span class="cat-icon"><i class="fas fa-seedling"></i></span><span>Gardens</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- Featured Spots -->
+<section class="section bg-light">
+  <div class="container">
+    <div class="section-header">
+      <h2 class="section-title">Top Tourist Spots</h2>
+      <a href="/spots" class="btn-link">View All <i class="fas fa-arrow-right"></i></a>
+    </div>
+    <div class="cards-grid">
+      <% spots.forEach(spot => { %>
+      <div class="card">
+        <div class="card-img">
+          <img src="<%= spot.image %>" alt="<%= spot.name %>" loading="lazy" onerror="this.src='/images/placeholder.jpg'"/>
+          <span class="card-badge"><%= spot.category %></span>
+          <% if (locals.user) { %>
+          <a href="/spots/<%= spot.id %>/favorite" class="card-fav"><i class="far fa-heart"></i></a>
+          <% } %>
+        </div>
+        <div class="card-body">
+          <div class="card-meta"><i class="fas fa-map-marker-alt"></i> <%= spot.district %></div>
+          <h3><%= spot.name %></h3>
+          <p><%= spot.description.substring(0, 80) %>...</p>
+          <div class="card-footer">
+            <div class="rating"><i class="fas fa-star"></i> <%= spot.rating %></div>
+            <a href="/spots/<%= spot.id %>" class="btn-sm">View Details</a>
+          </div>
+        </div>
+      </div>
+      <% }) %>
+    </div>
+  </div>
+</section>
+
+<!-- Packages -->
+<section class="section">
+  <div class="container">
+    <div class="section-header">
+      <h2 class="section-title">Travel Packages</h2>
+      <a href="/packages" class="btn-link">View All <i class="fas fa-arrow-right"></i></a>
+    </div>
+    <div class="cards-grid">
+      <% packages.forEach(pkg => { %>
+      <div class="card pkg-card">
+        <div class="card-img">
+          <img src="<%= pkg.image %>" alt="<%= pkg.name %>" loading="lazy" onerror="this.src='/images/placeholder.jpg'"/>
+          <div class="pkg-price">৳<%= pkg.price.toLocaleString() %></div>
+        </div>
+        <div class="card-body">
+          <span class="card-meta"><i class="fas fa-clock"></i> <%= pkg.duration %></span>
+          <h3><%= pkg.name %></h3>
+          <p><%= pkg.description.substring(0, 80) %>...</p>
+          <div class="pkg-includes">
+            <% pkg.includes.split(',').slice(0,3).forEach(inc => { %><span><i class="fas fa-check"></i> <%= inc.trim() %></span><% }) %>
+          </div>
+          <a href="/packages" class="btn-primary btn-block">Book Package</a>
+        </div>
+      </div>
+      <% }) %>
+    </div>
+  </div>
+</section>
+
+<!-- Why Choose Us -->
+<section class="section bg-dark">
+  <div class="container">
+    <h2 class="section-title" style="color:#fff">Why TouristiX?</h2>
+    <div class="features-grid">
+      <div class="feature"><i class="fas fa-shield-alt"></i><h4>Verified Listings</h4><p>All hotels and guides verified by our team.</p></div>
+      <div class="feature"><i class="fas fa-tags"></i><h4>Best Prices</h4><p>Guaranteed best prices with no hidden charges.</p></div>
+      <div class="feature"><i class="fas fa-headset"></i><h4>24/7 Support</h4><p>Round the clock customer support in Bengali & English.</p></div>
+      <div class="feature"><i class="fas fa-map-marked-alt"></i><h4>Local Expertise</h4><p>Guides with authentic local knowledge and experience.</p></div>
+    </div>
+  </div>
+</section>
+
+<%- include('../partials/footer') %>

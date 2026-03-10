@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title><%= title %> | Admin</title>
+  <link rel="stylesheet" href="/css/style.css"/>
+  <link rel="stylesheet" href="/css/admin.css"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+</head>
+<body class="admin-body">
+<div class="admin-layout">
+  <!-- Sidebar -->
+  <aside class="admin-sidebar">
+    <div class="admin-brand">
+      <i class="fas fa-compass"></i>
+      <span>TouristiX <b>Admin</b></span>
+    </div>
+    <nav class="admin-nav">
+      <a href="/admin/dashboard" class="<%= title==='Admin Dashboard'?'active':'' %>"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+      <a href="/admin/users" class="<%= title==='Manage Users'?'active':'' %>"><i class="fas fa-users"></i> Users</a>
+      <a href="/admin/bookings" class="<%= title==='Manage Bookings'?'active':'' %>"><i class="fas fa-calendar-check"></i> Bookings</a>
+      <a href="/admin/spots" class="<%= title==='Manage Spots'?'active':'' %>"><i class="fas fa-map-marker-alt"></i> Tourist Spots</a>
+      <a href="/admin/hotels" class="<%= title==='Manage Hotels'?'active':'' %>"><i class="fas fa-hotel"></i> Hotels</a>
+      <a href="/admin/guides" class="<%= title==='Manage Guides'?'active':'' %>"><i class="fas fa-user-tie"></i> Guides</a>
+      <a href="/admin/packages" class="<%= title==='Manage Packages'?'active':'' %>"><i class="fas fa-box-open"></i> Packages</a>
+      <a href="/admin/uploads" class="<%= title==='Upload Images'?'active':'' %>"><i class="fas fa-images"></i> Media</a>
+      <hr/>
+      <a href="/"><i class="fas fa-globe"></i> View Site</a>
+      <a href="/auth/logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
+    </nav>
+  </aside>
+  <div class="admin-content">
+    <div class="admin-topbar">
+      <h2><%= title %></h2>
+      <div class="admin-user"><i class="fas fa-user-shield"></i> <%= user.name %></div>
+    </div>
+    <div class="admin-main">

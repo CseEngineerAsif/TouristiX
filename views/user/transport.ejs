@@ -1,0 +1,295 @@
+<%- include('../partials/header') %>
+
+<section class="page-header">
+  <div class="container">
+    <h1><i class="fas fa-bus"></i> Transport Booking</h1>
+    <p>Book buses, trains, flights and more</p>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <% if (locals.success_msg && success_msg.length) { %>
+      <div class="alert alert-success"><%= success_msg[0] %></div>
+    <% } %>
+    <% if (locals.error_msg && error_msg.length) { %>
+      <div class="alert alert-danger"><%= error_msg[0] %></div>
+    <% } %>
+
+    <form action="/transport" method="GET" class="filter-form">
+      <input type="text" name="from" placeholder="From (e.g. Dhaka)" value="<%= locals.from || '' %>"/>
+      <input type="text" name="to" placeholder="To (e.g. Cox's Bazar)" value="<%= locals.to || '' %>"/>
+      <select name="type">
+        <option value="">All Types</option>
+        <% ['Bus','Train','Air','Launch'].forEach(t => { %>
+        <option value="<%= t %>" <%= locals.type===t?'selected':'' %>><%= t %></option>
+        <% }) %>
+      </select>
+      <button type="submit" class="btn-primary"><i class="fas fa-search"></i> Search</button>
+      <a href="/transport" class="btn-outline">Clear</a>
+    </form>
+
+    <% if (locals.user) { %>
+      <div class="alert alert-success">
+        Wallet Balance: <strong>BDT <%= (walletBalance || 0).toLocaleString() %></strong>
+      </div>
+
+      <div class="exchange-section">
+        <div class="exchange-title-row">
+          <h3><i class="fas fa-ticket"></i> My Transport Tickets</h3>
+          <small>Only admin-confirmed tickets can be released. Exchange window: within 3 days and before 3 hours of departure.</small>
+        </div>
+
+        <% if ((myTransportTickets || []).length === 0) { %>
+          <p class="exchange-empty">No active transport tickets found.</p>
+        <% } else { %>
+          <div class="ticket-exchange-list">
+            <% myTransportTickets.forEach(ticket => { %>
+              <div class="ticket-exchange-card">
+                <div>
+                  <h4><%= ticket.item_name %></h4>
+                  <p><strong>Status:</strong> <%= ticket.status %> <%= ticket.exchange_locked ? '(Exchanged Ticket)' : '' %></p>
+                  <p><i class="fas fa-calendar"></i> Travel date: <%= ticket.check_in %></p>
+                  <p><i class="fas fa-clock"></i> Departure: <%= ticket.departure_time %></p>
+                  <p><i class="fas fa-users"></i> <%= ticket.persons %> ticket(s)</p>
+                </div>
+                <div class="ticket-exchange-actions">
+                  <span class="booking-price">BDT <%= (ticket.total_price || 0).toLocaleString() %></span>
+                  <% if (ticket.status === 'confirmed' && !ticket.exchange_locked) { %>
+                    <form action="/bookings/<%= ticket.id %>/release-ticket" method="POST">
+                      <button
+                        type="submit"
+                        class="btn-danger-sm"
+                        <%= ticket.exchange_open ? '' : 'disabled' %>
+                        onclick="return confirm('Release this ticket for exchange?')"
+                      >
+                        Release Ticket
+                      </button>
+                    </form>
+                  <% } %>
+                  <% if (!ticket.exchange_open && ticket.status === 'confirmed') { %>
+                    <small class="muted-text">Release window closed</small>
+                  <% } %>
+                  <% if (ticket.status === 'pending') { %>
+                    <small class="muted-text">Waiting for admin confirmation</small>
+                  <% } %>
+                  <% if (ticket.status === 'released') { %>
+                    <small class="muted-text">Waiting for your approval on incoming requests</small>
+                  <% } %>
+                  <% if (ticket.exchange_locked) { %>
+                    <small class="muted-text">You cannot release/cancel this exchanged ticket</small>
+                  <% } %>
+                </div>
+              </div>
+            <% }) %>
+          </div>
+        <% } %>
+      </div>
+
+      <div class="exchange-section">
+        <div class="exchange-title-row">
+          <h3><i class="fas fa-user-check"></i> Incoming Exchange Requests</h3>
+          <small>Only ticket owner can accept or reject request.</small>
+        </div>
+
+        <% if ((incomingExchangeRequests || []).length === 0) { %>
+          <p class="exchange-empty">No incoming requests for your released tickets.</p>
+        <% } else { %>
+          <div class="ticket-exchange-list">
+            <% incomingExchangeRequests.forEach(r => { %>
+              <div class="ticket-exchange-card">
+                <div>
+                  <h4><%= r.item_name %></h4>
+                  <p><i class="fas fa-user"></i> Requested by: <%= r.requester_name %></p>
+                  <p><i class="fas fa-route"></i> <%= r.from_location %> to <%= r.to_location %></p>
+                  <p><i class="fas fa-calendar"></i> Travel date: <%= r.check_in %></p>
+                  <p><i class="fas fa-clock"></i> Departure: <%= r.departure_time %></p>
+                  <p><strong>Held Payment:</strong> BDT <%= (r.amount || 0).toLocaleString() %></p>
+                </div>
+                <div class="ticket-exchange-actions">
+                  <form action="/exchange-requests/<%= r.id %>/accept" method="POST">
+                    <button type="submit" class="btn-sm" onclick="return confirm('Accept this exchange request?')">Accept</button>
+                  </form>
+                  <form action="/exchange-requests/<%= r.id %>/reject" method="POST">
+                    <button type="submit" class="btn-danger-sm" onclick="return confirm('Reject this exchange request?')">Reject</button>
+                  </form>
+                </div>
+              </div>
+            <% }) %>
+          </div>
+        <% } %>
+      </div>
+
+      <div class="exchange-section">
+        <div class="exchange-title-row">
+          <h3><i class="fas fa-right-left"></i> Released Tickets Exchange</h3>
+          <small>Claim only within 3 days and before 3 hours of departure.</small>
+        </div>
+
+        <% if ((releasedTickets || []).length === 0) { %>
+          <p class="exchange-empty">No released tickets available right now.</p>
+        <% } else { %>
+          <div class="ticket-exchange-list">
+            <% releasedTickets.forEach(ticket => { %>
+              <div class="ticket-exchange-card">
+                <div>
+                  <h4><%= ticket.item_name %></h4>
+                  <p><i class="fas fa-route"></i> <%= ticket.from_location %> to <%= ticket.to_location %></p>
+                  <p><i class="fas fa-calendar"></i> Travel date: <%= ticket.check_in %></p>
+                  <p><i class="fas fa-clock"></i> Departure: <%= ticket.departure_time %></p>
+                  <p><i class="fas fa-users"></i> <%= ticket.persons %> ticket(s)</p>
+                </div>
+                <div class="ticket-exchange-actions">
+                  <span class="booking-price">BDT <%= (ticket.total_price || 0).toLocaleString() %></span>
+                  <form action="/tickets/<%= ticket.id %>/request-exchange" method="POST">
+                    <button
+                      type="submit"
+                      class="btn-sm"
+                      <%= (ticket.exchange_open && !ticket.already_requested) ? '' : 'disabled' %>
+                      onclick="return confirm('Send exchange request for this ticket?')"
+                    >
+                      Request Ticket
+                    </button>
+                  </form>
+                  <% if (ticket.already_requested) { %>
+                    <small class="muted-text">Request already submitted (payment held)</small>
+                  <% } else if (!ticket.exchange_open) { %>
+                    <small class="muted-text">Claim window closed</small>
+                  <% } %>
+                </div>
+              </div>
+            <% }) %>
+          </div>
+        <% } %>
+      </div>
+
+      <div class="exchange-section">
+        <div class="exchange-title-row">
+          <h3><i class="fas fa-receipt"></i> My Exchange Requests</h3>
+          <small>Track accepted/rejected requests and payment state.</small>
+        </div>
+
+        <% if ((myExchangeRequests || []).length === 0) { %>
+          <p class="exchange-empty">No exchange requests submitted yet.</p>
+        <% } else { %>
+          <div class="ticket-exchange-list">
+            <% myExchangeRequests.forEach(r => { %>
+              <div class="ticket-exchange-card">
+                <div>
+                  <h4><%= r.item_name %></h4>
+                  <p><i class="fas fa-user"></i> Owner: <%= r.owner_name %></p>
+                  <p><i class="fas fa-route"></i> <%= r.from_location %> to <%= r.to_location %></p>
+                  <p><strong>Status:</strong> <%= r.status %></p>
+                  <p><strong>Payment:</strong> <%= r.payment_status %> (BDT <%= (r.amount || 0).toLocaleString() %>)</p>
+                </div>
+              </div>
+            <% }) %>
+          </div>
+        <% } %>
+      </div>
+    <% } %>
+
+    <div class="transport-list">
+      <% transports.forEach(t => { %>
+      <div class="transport-card">
+        <div class="transport-icon">
+          <% if(t.type==='Bus') { %><i class="fas fa-bus"></i>
+          <% } else if(t.type==='Train') { %><i class="fas fa-train"></i>
+          <% } else if(t.type==='Air') { %><i class="fas fa-plane"></i>
+          <% } else { %><i class="fas fa-ship"></i><% } %>
+          <span class="transport-type"><%= t.type %></span>
+        </div>
+        <div class="transport-route">
+          <div class="route-from"><strong><%= t.from_location %></strong></div>
+          <div class="route-arrow"><i class="fas fa-long-arrow-alt-right"></i></div>
+          <div class="route-to"><strong><%= t.to_location %></strong></div>
+        </div>
+        <div class="transport-info">
+          <p><i class="fas fa-building"></i> <%= t.company %></p>
+          <p><i class="fas fa-clock"></i> Departs: <%= t.departure_time %></p>
+          <p><i class="fas fa-chair"></i> <%= t.seats_available %> seats left</p>
+        </div>
+        <div class="transport-price">
+          <div class="price">BDT <%= t.price %></div>
+          <div class="price-label">per person</div>
+          <% if (locals.user) { %>
+          <button
+            class="btn-sm"
+            data-transport-id="<%= t.id %>"
+            data-transport-name="<%= t.company %> - <%= t.from_location %> to <%= t.to_location %>"
+            data-transport-price="<%= t.price %>"
+            onclick="openTransportBook(this)"
+          >Book</button>
+          <% } else { %>
+          <a href="/auth/login" class="btn-sm">Login</a>
+          <% } %>
+        </div>
+      </div>
+      <% }) %>
+      <% if (transports.length === 0) { %>
+      <div class="empty-state">
+        <i class="fas fa-search"></i>
+        <h3>No transport found</h3>
+        <p>Try different search parameters</p>
+      </div>
+      <% } %>
+    </div>
+  </div>
+</section>
+
+<!-- Transport Booking Modal -->
+<div id="transportModal" class="modal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3>Book Transport</h3>
+      <button onclick="document.getElementById('transportModal').style.display='none'" class="modal-close">&times;</button>
+    </div>
+    <form action="/book/transport" method="POST" class="modal-form js-payment-form">
+      <input type="hidden" name="transport_id" id="t_id"/>
+      <input type="hidden" name="transport_name" id="t_name"/>
+      <input type="hidden" name="total_price" id="t_total"/>
+      <div class="form-group">
+        <label>Route</label>
+        <input type="text" id="t_display" readonly class="form-control"/>
+      </div>
+      <div class="form-group">
+        <label>Travel Date</label>
+        <input type="date" name="travel_date" class="form-control" required/>
+      </div>
+      <div class="form-group">
+        <label>Number of Tickets</label>
+        <input type="number" name="persons" id="t_persons" value="1" min="1" max="10" class="form-control" oninput="calcTransportPrice()"/>
+      </div>
+      <div class="price-display" id="tPriceDisplay"></div>
+      <button type="submit" class="btn-primary btn-block">Confirm Booking</button>
+    </form>
+  </div>
+</div>
+
+<script>
+let tPrice = 0;
+const today = new Date().toISOString().split('T')[0];
+document.querySelector('[name="travel_date"]').min = today;
+
+function openTransportBook(btn) {
+  const id = btn.getAttribute('data-transport-id');
+  const name = btn.getAttribute('data-transport-name');
+  const price = Number(btn.getAttribute('data-transport-price') || 0);
+  tPrice = price;
+  document.getElementById('t_id').value = id;
+  document.getElementById('t_name').value = name;
+  document.getElementById('t_display').value = name;
+  document.getElementById('t_persons').value = 1;
+  document.getElementById('transportModal').style.display = 'flex';
+  calcTransportPrice();
+}
+function calcTransportPrice() {
+  const p = parseInt(document.getElementById('t_persons').value) || 1;
+  const total = p * tPrice;
+  document.getElementById('t_total').value = total;
+  document.getElementById('tPriceDisplay').innerHTML = `BDT ${tPrice} x ${p} = <strong>BDT ${total}</strong>`;
+}
+</script>
+
+<%- include('../partials/payment-modal') %>
+<%- include('../partials/footer') %>

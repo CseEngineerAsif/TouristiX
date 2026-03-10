@@ -1,0 +1,67 @@
+<%- include('../partials/header') %>
+
+<section class="page-header">
+  <div class="container">
+    <h1><i class="fas fa-map-marker-alt"></i> Tourist Spots</h1>
+    <p>Discover all the beautiful destinations across Bangladesh</p>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <!-- Filters -->
+    <form action="/spots" method="GET" class="filter-form">
+      <input type="text" name="search" placeholder="Search spots or districts..." value="<%= locals.search || '' %>"/>
+      <select name="category">
+        <option value="">All Categories</option>
+        <% ['Beach','Hill','Forest','Heritage','Island','Garden','Lake'].forEach(c => { %>
+        <option value="<%= c %>" <%= locals.category===c?'selected':'' %>><%= c %></option>
+        <% }) %>
+      </select>
+      <select name="division">
+        <option value="">All Divisions</option>
+        <% ['Chittagong','Dhaka','Sylhet','Khulna','Rajshahi','Barisal','Rangpur','Mymensingh'].forEach(d => { %>
+        <option value="<%= d %>" <%= locals.division===d?'selected':'' %>><%= d %></option>
+        <% }) %>
+      </select>
+      <button type="submit" class="btn-primary"><i class="fas fa-search"></i> Search</button>
+      <a href="/spots" class="btn-outline">Clear</a>
+    </form>
+
+    <p class="results-count"><%= spots.length %> spots found</p>
+
+    <div class="cards-grid">
+      <% spots.forEach(spot => { %>
+      <div class="card">
+        <div class="card-img">
+          <img src="<%= spot.image %>" alt="<%= spot.name %>" loading="lazy" onerror="this.src='/images/placeholder.jpg'"/>
+          <span class="card-badge"><%= spot.category %></span>
+          <% if (spot.entry_fee > 0) { %><span class="card-badge card-badge-2">৳<%= spot.entry_fee %></span><% } %>
+        </div>
+        <div class="card-body">
+          <div class="card-meta"><i class="fas fa-map-marker-alt"></i> <%= spot.district %> &bull; <%= spot.division %></div>
+          <h3><%= spot.name %></h3>
+          <p class="spot-desc"><%= spot.description.substring(0,90) %>...</p>
+          <div class="card-info-row">
+            <span><i class="fas fa-calendar"></i> <%= spot.best_time || 'Year round' %></span>
+          </div>
+          <div class="card-footer">
+            <div class="rating"><i class="fas fa-star"></i> <%= spot.rating %> (<%= spot.total_reviews %> reviews)</div>
+            <a href="/spots/<%= spot.id %>" class="btn-sm">Explore</a>
+          </div>
+        </div>
+      </div>
+      <% }) %>
+      <% if (spots.length === 0) { %>
+      <div class="empty-state">
+        <i class="fas fa-search"></i>
+        <h3>No spots found</h3>
+        <p>Try different search terms or clear filters</p>
+        <a href="/spots" class="btn-primary">View All Spots</a>
+      </div>
+      <% } %>
+    </div>
+  </div>
+</section>
+
+<%- include('../partials/footer') %>

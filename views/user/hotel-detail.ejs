@@ -1,0 +1,201 @@
+<%- include('../partials/header') %>
+
+<section class="page-header">
+  <div class="container">
+    <a href="/hotels" class="btn-back"><i class="fas fa-arrow-left"></i> Back to Hotels</a>
+    <h1><i class="fas fa-hotel"></i> <%= hotel.name %></h1>
+    <p>Full hotel information and booking details</p>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container detail-layout">
+    <div class="detail-main">
+      <div class="detail-hero">
+        <img src="<%= hotel.image %>" alt="<%= hotel.name %>" onerror="this.src='/images/placeholder.jpg'" />
+        <div class="detail-hero-overlay">
+          <div>
+            <h2 style="color:white;font-size:1.6rem;font-weight:800;"><%= hotel.name %></h2>
+            <p style="color:rgba(255,255,255,0.85);margin-top:4px;"><i class="fas fa-map-marker-alt"></i> <%= hotel.location %>, <%= hotel.district %></p>
+          </div>
+          <div class="detail-rating"><i class="fas fa-star"></i> <%= hotel.rating %></div>
+        </div>
+      </div>
+
+      <div class="detail-info">
+        <div class="info-pills">
+          <span><i class="fas fa-money-bill-wave"></i> ৳<%= (hotel.price_per_night || 0).toLocaleString() %> / night</span>
+          <span><i class="fas fa-door-open"></i> Rooms: <%= hotel.available_rooms %> / <%= hotel.total_rooms %> available</span>
+          <span><i class="fas fa-location-dot"></i> District: <%= hotel.district %></span>
+        </div>
+
+        <h3 style="margin-bottom:10px;">Hotel Information</h3>
+        <div class="sidebar-block" style="margin-bottom:20px;">
+          <div class="sidebar-item-top">
+            <strong>Hotel Name</strong>
+            <span><%= hotel.name %></span>
+          </div>
+          <div class="sidebar-item-top">
+            <strong>Location</strong>
+            <span><%= hotel.location %>, <%= hotel.district %></span>
+          </div>
+          <div class="sidebar-item-top">
+            <strong>Price Per Night</strong>
+            <span>৳<%= (hotel.price_per_night || 0).toLocaleString() %></span>
+          </div>
+          <div class="sidebar-item-top">
+            <strong>Rating</strong>
+            <span><%= hotel.rating %> / 5</span>
+          </div>
+          <div class="sidebar-item-top">
+            <strong>Total Rooms</strong>
+            <span><%= hotel.total_rooms %></span>
+          </div>
+          <div class="sidebar-item-top">
+            <strong>Available Rooms</strong>
+            <span><%= hotel.available_rooms %></span>
+          </div>
+        </div>
+
+        <h3 style="margin-bottom:10px;">About This Hotel</h3>
+        <p class="detail-desc"><%= hotel.description || 'No detailed description available for this hotel yet.' %></p>
+
+        <h3 style="margin-bottom:10px;">Facilities</h3>
+        <div class="facilities-list" style="margin-bottom:24px;">
+          <% if (!facilities || facilities.length === 0) { %>
+            <span class="muted-text">No facilities listed.</span>
+          <% } else { %>
+            <% facilities.forEach(f => { %>
+              <span class="facility-tag"><i class="fas fa-check"></i> <%= f %></span>
+            <% }) %>
+          <% } %>
+        </div>
+
+        <% if (locals.user) { %>
+          <button class="btn-primary" onclick="openBooking('<%= hotel.id %>','<%= hotel.name.replace(/'/g,'') %>',<%= hotel.price_per_night %>)">
+            <i class="fas fa-calendar-check"></i> Book Now
+          </button>
+        <% } else { %>
+          <a href="/auth/login" class="btn-primary">Login to Book</a>
+        <% } %>
+      </div>
+    </div>
+
+    <aside class="detail-sidebar">
+      <div class="sidebar-block">
+        <div class="sidebar-head">
+          <h3><i class="fas fa-map"></i> Location</h3>
+        </div>
+        <p class="sidebar-empty"><strong>Address:</strong> <%= hotel.location %>, <%= hotel.district %></p>
+        <a
+          href="https://www.google.com/maps/search/?api=1&query=<%= encodeURIComponent(hotel.location + ', ' + hotel.district) %>"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="btn-sm"
+          style="margin-top:10px;"
+        >
+          <i class="fas fa-map-marked-alt"></i> Open in Google Maps
+        </a>
+      </div>
+
+      <div class="sidebar-block">
+        <div class="sidebar-head">
+          <h3><i class="fas fa-circle-info"></i> Booking Notes</h3>
+        </div>
+        <p class="sidebar-empty">Room availability and prices can change based on demand and selected dates.</p>
+        <p class="sidebar-empty">Use the booking form to choose check-in/check-out and get final total price.</p>
+      </div>
+
+      <div class="sidebar-block">
+        <div class="sidebar-head">
+          <h3><i class="fas fa-building"></i> Nearby Hotels</h3>
+          <a href="/hotels?district=<%= encodeURIComponent(hotel.district) %>">View all</a>
+        </div>
+        <% if (!relatedHotels || relatedHotels.length === 0) { %>
+          <p class="sidebar-empty">No other hotels found in this district.</p>
+        <% } else { %>
+          <% relatedHotels.forEach(r => { %>
+            <div class="sidebar-item">
+              <div class="sidebar-item-top">
+                <strong><%= r.name %></strong>
+                <span>৳<%= (r.price_per_night || 0).toLocaleString() %>/night</span>
+              </div>
+              <p><i class="fas fa-map-marker-alt"></i> <%= r.location %></p>
+              <div class="sidebar-item-actions">
+                <span><i class="fas fa-star"></i> <%= r.rating %></span>
+                <a href="/hotels/<%= r.id %>" class="btn-sm">View</a>
+              </div>
+            </div>
+          <% }) %>
+        <% } %>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<% if (locals.user) { %>
+<div id="bookModal" class="modal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3>Book Hotel</h3>
+      <button onclick="closeModal()" class="modal-close">&times;</button>
+    </div>
+    <form action="/book/hotel" method="POST" class="modal-form js-payment-form">
+      <input type="hidden" name="hotel_id" id="m_hotel_id"/>
+      <input type="hidden" name="hotel_name" id="m_hotel_name"/>
+      <input type="hidden" name="total_price" id="m_total_price"/>
+      <div class="form-group">
+        <label>Hotel</label>
+        <input type="text" id="m_hotel_display" readonly class="form-control"/>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Check-in</label>
+          <input type="date" name="check_in" id="m_checkin" class="form-control" required/>
+        </div>
+        <div class="form-group">
+          <label>Check-out</label>
+          <input type="date" name="check_out" id="m_checkout" class="form-control" required/>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Persons</label>
+        <input type="number" name="persons" value="1" min="1" max="10" class="form-control" id="m_persons"/>
+      </div>
+      <div class="price-display" id="priceDisplay">Price will be calculated</div>
+      <button type="submit" class="btn-primary btn-block">Confirm Booking</button>
+    </form>
+  </div>
+</div>
+
+<script>
+let hotelPrice = 0;
+function openBooking(id, name, price) {
+  hotelPrice = price;
+  document.getElementById('m_hotel_id').value = id;
+  document.getElementById('m_hotel_name').value = name;
+  document.getElementById('m_hotel_display').value = name;
+  document.getElementById('bookModal').style.display = 'flex';
+  updatePrice();
+}
+function closeModal() { document.getElementById('bookModal').style.display = 'none'; }
+function updatePrice() {
+  const ci = document.getElementById('m_checkin').value;
+  const co = document.getElementById('m_checkout').value;
+  if (ci && co) {
+    const nights = Math.max(1, (new Date(co) - new Date(ci)) / 86400000);
+    const total = nights * hotelPrice;
+    document.getElementById('m_total_price').value = total;
+    document.getElementById('priceDisplay').innerHTML = `৳${hotelPrice.toLocaleString()} x ${nights} night(s) = <strong>৳${total.toLocaleString()}</strong>`;
+  }
+}
+document.getElementById('m_checkin').addEventListener('change', updatePrice);
+document.getElementById('m_checkout').addEventListener('change', updatePrice);
+const today = new Date().toISOString().split('T')[0];
+document.getElementById('m_checkin').min = today;
+document.getElementById('m_checkout').min = today;
+</script>
+<% } %>
+
+<% if (locals.user) { %><%- include('../partials/payment-modal') %><% } %>
+<%- include('../partials/footer') %>

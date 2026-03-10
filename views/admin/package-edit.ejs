@@ -1,0 +1,30 @@
+<%- include('./partials/admin-header') %>
+
+<div class="admin-card">
+  <div class="admin-card-header">
+    <h3><i class="fas fa-pen"></i> Edit Package</h3>
+    <a href="/admin/packages" class="btn-outline"><i class="fas fa-arrow-left"></i> Back</a>
+  </div>
+  <form action="/admin/packages/<%= pkg.id %>/edit" method="POST" enctype="multipart/form-data" class="modal-form">
+    <input type="hidden" name="current_image" value="<%= pkg.image %>"/>
+    <div class="form-row">
+      <div class="form-group"><label>Name</label><input type="text" name="name" required class="form-control" value="<%= pkg.name %>"/></div>
+      <div class="form-group"><label>Destination</label><input type="text" name="destination" required class="form-control" value="<%= pkg.destination %>"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Duration</label><input type="text" name="duration" class="form-control" value="<%= pkg.duration || '' %>"/></div>
+      <div class="form-group"><label>Price (BDT)</label><input type="number" name="price" required class="form-control" value="<%= pkg.price %>"/></div>
+    </div>
+    <div class="form-group"><label>Includes</label><input type="text" name="includes" class="form-control" value="<%= pkg.includes || '' %>"/></div>
+    <div class="form-group"><label>Max Persons</label><input type="number" name="max_persons" class="form-control" value="<%= pkg.max_persons || 20 %>"/></div>
+    <div class="form-group"><label>Description</label><textarea name="description" rows="4" class="form-control"><%= pkg.description || '' %></textarea></div>
+    <div class="form-group">
+      <label>Current Image</label>
+      <img src="<%= pkg.image %>" alt="" style="width:200px;height:120px;object-fit:cover;border-radius:10px;border:1px solid #ddd" onerror="this.src='/images/placeholder.jpg'"/>
+    </div>
+    <div class="form-group"><label>Upload New Image</label><input type="file" name="image" accept="image/*" class="form-control"/></div>
+    <button type="submit" class="btn-primary">Update Package</button>
+  </form>
+</div>
+
+<%- include('./partials/admin-footer') %>
