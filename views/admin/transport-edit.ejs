@@ -1,0 +1,43 @@
+<%- include('./partials/admin-header') %>
+
+<div class="admin-card">
+  <div class="admin-card-header">
+    <h3><i class="fas fa-pen"></i> Edit Transport</h3>
+    <a href="/admin/transport" class="btn-outline"><i class="fas fa-arrow-left"></i> Back</a>
+  </div>
+  <form action="/admin/transport/<%= transport.id %>/edit" method="POST" enctype="multipart/form-data" class="modal-form">
+    <input type="hidden" name="current_image" value="<%= transport.image %>"/>
+    <div class="form-group">
+      <label>Owner (optional)</label>
+      <select name="owner_user_id" class="form-control">
+        <option value="">Unassigned</option>
+        <% (owners || []).forEach(o => { %>
+          <option value="<%= o.id %>" <%= String(transport.owner_user_id)===String(o.id) ? 'selected' : '' %>><%= o.name %> (<%= o.email %>)</option>
+        <% }) %>
+      </select>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Type</label><input type="text" name="type" required class="form-control" value="<%= transport.type %>"/></div>
+      <div class="form-group"><label>Company</label><input type="text" name="company" class="form-control" value="<%= transport.company || '' %>"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>From</label><input type="text" name="from_location" required class="form-control" value="<%= transport.from_location %>"/></div>
+      <div class="form-group"><label>To</label><input type="text" name="to_location" required class="form-control" value="<%= transport.to_location %>"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Departure Time</label><input type="text" name="departure_time" class="form-control" value="<%= transport.departure_time || '' %>"/></div>
+      <div class="form-group"><label>Price (BDT)</label><input type="number" name="price" required class="form-control" value="<%= transport.price %>"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Seats Available</label><input type="number" name="seats_available" class="form-control" value="<%= transport.seats_available %>"/></div>
+    </div>
+    <div class="form-group">
+      <label>Current Image</label>
+      <img src="<%= transport.image %>" alt="" style="width:200px;height:120px;object-fit:cover;border-radius:10px;border:1px solid #ddd" onerror="this.src='/images/placeholder.jpg'"/>
+    </div>
+    <div class="form-group"><label>Upload New Image</label><input type="file" name="image" accept="image/*" class="form-control"/></div>
+    <button type="submit" class="btn-primary">Update Transport</button>
+  </form>
+</div>
+
+<%- include('./partials/admin-footer') %>

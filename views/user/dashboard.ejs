@@ -13,9 +13,10 @@
     <% if (locals.error_msg) { %><div class="alert alert-danger"><%= error_msg %></div><% } %>
 
     <div class="dashboard-tabs">
+      <button class="tab-btn" onclick="showTab('profile', this)"><i class="fas fa-user-circle"></i> Profile</button>
+      <button class="tab-btn" onclick="showTab('wallet', this)"><i class="fas fa-wallet"></i> My Wallet Balance</button>
       <button class="tab-btn active" onclick="showTab('bookings', this)"><i class="fas fa-calendar-check"></i> My Bookings (<%= bookings.length %>)</button>
       <button class="tab-btn" onclick="showTab('favorites', this)"><i class="fas fa-heart"></i> Saved Spots (<%= favorites.length %>)</button>
-      <button class="tab-btn" onclick="showTab('profile', this)"><i class="fas fa-user-circle"></i> Profile</button>
     </div>
 
     <!-- Bookings Tab -->
@@ -153,6 +154,69 @@
         </div>
       </div>
       <% } %>
+    </div>
+
+    <!-- Wallet Tab -->
+    <div id="wallet-tab" class="tab-content">
+      <div class="empty-state" style="max-width:820px; margin:0 auto;">
+        <i class="fas fa-wallet"></i>
+        <h3>My Wallet Balance</h3>
+        <p>Your current wallet balance is</p>
+        <div class="booking-price" style="font-size:1.6rem; margin:12px 0;">BDT <%= (walletBalance || 0).toLocaleString() %></div>
+        <p class="muted-text">Wallet balance is used for bookings and escrow payments.</p>
+
+        <div class="admin-card" style="margin-top:18px;">
+          <div class="admin-card-header">
+            <h3><i class="fas fa-plus-circle"></i> Top Up Wallet</h3>
+          </div>
+          <form action="/wallet/topup" method="POST" class="modal-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Gateway</label>
+                <select name="gateway" required class="form-control">
+                  <option value="">Select</option>
+                  <option value="bkash">bKash</option>
+                  <option value="nagad">Nagad</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Amount (BDT)</label>
+                <input type="number" name="amount" min="10" required class="form-control" placeholder="1000"/>
+              </div>
+            </div>
+            <button type="submit" class="btn-primary">Top Up Wallet</button>
+          </form>
+          <p class="muted-text" style="margin-top:10px;">Top-ups are verified automatically via the payment gateway.</p>
+        </div>
+
+        <div class="admin-card" style="margin-top:18px;">
+          <div class="admin-card-header">
+            <h3><i class="fas fa-list"></i> Recent Wallet Activity</h3>
+          </div>
+          <% if (!walletTx || walletTx.length === 0) { %>
+            <p class="muted-text">No wallet transactions yet.</p>
+          <% } else { %>
+            <div class="table-responsive">
+              <table class="admin-table">
+                <thead>
+                  <tr><th>#</th><th>Type</th><th>Amount</th><th>Note</th><th>Date</th></tr>
+                </thead>
+                <tbody>
+                  <% walletTx.forEach((t, i) => { %>
+                    <tr>
+                      <td><%= i + 1 %></td>
+                      <td><%= t.type %></td>
+                      <td><%= t.amount >= 0 ? '+' : '' %>BDT <%= Math.abs(t.amount || 0).toLocaleString() %></td>
+                      <td><%= t.note || '-' %></td>
+                      <td><%= t.created_at %></td>
+                    </tr>
+                  <% }) %>
+                </tbody>
+              </table>
+            </div>
+          <% } %>
+        </div>
+      </div>
     </div>
   </div>
 </section>

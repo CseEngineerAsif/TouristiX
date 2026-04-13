@@ -37,7 +37,14 @@ router.post('/login', isGuest, (req, res) => {
       req.flash('error', 'Invalid email or password.');
       return res.redirect('/auth/login');
     }
-    req.session.user = { id: user.id, name: user.name, email: user.email, role: user.role, avatar: user.avatar };
+    req.session.user = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      avatar: user.avatar,
+      gender: user.gender || ''
+    };
     if (user.role === 'admin') return res.redirect('/admin/dashboard');
     res.redirect('/');
   });
@@ -48,7 +55,7 @@ router.get('/register', isGuest, (req, res) => {
 });
 
 router.post('/register', isGuest, upload.single('id_document'), (req, res) => {
-  const { name, email, password, phone, address, id_type } = req.body;
+  const { name, email, password, phone, address, id_type, gender } = req.body;
   const idDocument = req.file ? `/uploads/${req.file.filename}` : '';
 
   if (!id_type || !idDocument) {
@@ -63,8 +70,8 @@ router.post('/register', isGuest, upload.single('id_document'), (req, res) => {
     }
     const hash = bcrypt.hashSync(password, 10);
     db.run(
-      "INSERT INTO users (name, email, password, phone, address, id_type, id_document) VALUES (?,?,?,?,?,?,?)",
-      [name, email, hash, phone, address, id_type, idDocument],
+      "INSERT INTO users (name, email, password, phone, address, id_type, id_document, gender) VALUES (?,?,?,?,?,?,?,?)",
+      [name, email, hash, phone, address, id_type, idDocument, gender || ''],
       function(err) {
       if (err) { req.flash('error', 'Registration failed.'); return res.redirect('/auth/register'); }
       req.flash('success', 'Account created! Please login.');

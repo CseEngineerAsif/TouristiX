@@ -7,6 +7,15 @@
   </div>
   <form action="/admin/packages/<%= pkg.id %>/edit" method="POST" enctype="multipart/form-data" class="modal-form">
     <input type="hidden" name="current_image" value="<%= pkg.image %>"/>
+    <div class="form-group">
+      <label>Owner (optional)</label>
+      <select name="owner_user_id" class="form-control">
+        <option value="">Unassigned</option>
+        <% (owners || []).forEach(o => { %>
+          <option value="<%= o.id %>" <%= String(pkg.owner_user_id)===String(o.id) ? 'selected' : '' %>><%= o.name %> (<%= o.email %>)</option>
+        <% }) %>
+      </select>
+    </div>
     <div class="form-row">
       <div class="form-group"><label>Name</label><input type="text" name="name" required class="form-control" value="<%= pkg.name %>"/></div>
       <div class="form-group"><label>Destination</label><input type="text" name="destination" required class="form-control" value="<%= pkg.destination %>"/></div>

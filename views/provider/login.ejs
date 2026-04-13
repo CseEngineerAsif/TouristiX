@@ -1,0 +1,33 @@
+<%- include('../partials/header') %>
+
+<section class="auth-section">
+  <div class="auth-card">
+    <h2>Partner Login</h2>
+    <p class="muted-text">Sign in to manage your services and bookings.</p>
+
+    <% if (error && error.length) { %>
+      <div class="alert alert-danger"><%= error[0] %></div>
+    <% } %>
+    <% if (success && success.length) { %>
+      <div class="alert alert-success"><%= success[0] %></div>
+    <% } %>
+
+    <form action="/partner/login" method="POST">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" name="email" required class="form-control" placeholder="provider@email.com"/>
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" name="password" required class="form-control" placeholder="••••••••"/>
+      </div>
+      <button type="submit" class="btn-primary btn-block">Login</button>
+    </form>
+
+    <p class="muted-text" style="margin-top:12px;">
+      New partner? <a href="/partner/register">Create an account</a>
+    </p>
+  </div>
+</section>
+
+<%- include('../partials/footer') %>

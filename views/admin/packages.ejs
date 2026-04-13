@@ -38,6 +38,15 @@
       <button onclick="document.getElementById('addPackageModal').style.display='none'" class="modal-close">&times;</button>
     </div>
     <form action="/admin/packages/add" method="POST" enctype="multipart/form-data" class="modal-form">
+      <div class="form-group">
+        <label>Owner (optional)</label>
+        <select name="owner_user_id" class="form-control">
+          <option value="">Unassigned</option>
+          <% (owners || []).forEach(o => { %>
+            <option value="<%= o.id %>"><%= o.name %> (<%= o.email %>)</option>
+          <% }) %>
+        </select>
+      </div>
       <div class="form-row">
         <div class="form-group"><label>Name</label><input type="text" name="name" required class="form-control"/></div>
         <div class="form-group"><label>Destination</label><input type="text" name="destination" required class="form-control"/></div>

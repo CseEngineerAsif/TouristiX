@@ -2,7 +2,7 @@
 
 <section class="page-header">
   <div class="container">
-    <a href="/guides" class="btn-back"><i class="fas fa-arrow-left"></i> Back to Guides</a>
+    <a href="<%= returnTo || '/guides' %>" class="btn-back"><i class="fas fa-arrow-left"></i> Back</a>
   </div>
 </section>
 
@@ -96,6 +96,7 @@
       <input type="hidden" name="guide_id" id="g_id"/>
       <input type="hidden" name="guide_name" id="g_name_hidden"/>
       <input type="hidden" name="total_price" id="g_total"/>
+      <input type="hidden" name="return_to" value="<%= returnTo || '' %>"/>
       <div class="form-group">
         <label>Guide</label>
         <input type="text" id="g_display" readonly class="form-control"/>
@@ -134,6 +135,5 @@ function calcGuidePrice() {
 }
 </script>
 
-<%- include('../partials/payment-modal') %>
 <%- include('../partials/footer') %>
 

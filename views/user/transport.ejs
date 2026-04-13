@@ -7,8 +7,162 @@
   </div>
 </section>
 
+<style>
+.transport-page .filter-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto auto;
+  gap: 12px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.06);
+}
+.transport-page .filter-form input,
+.transport-page .filter-form select {
+  border-radius: 10px;
+}
+.transport-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 10px 0 18px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.transport-toolbar .wallet-badge {
+  background: #ecfdf3;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+.section-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 6px 0 16px;
+}
+.section-tab {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  color: #0f172a;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.section-tab.active {
+  background: #059669;
+  color: #ffffff;
+  border-color: #047857;
+  box-shadow: 0 10px 20px rgba(5, 150, 105, 0.2);
+}
+.section-tab .count {
+  background: rgba(255,255,255,0.2);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.7rem;
+}
+.section-panel { display: none; }
+.section-panel.active { display: block; }
+.transport-list {
+  display: grid;
+  gap: 18px;
+}
+.transport-card.enhanced {
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  padding: 16px 18px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.transport-card.enhanced:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 34px rgba(5, 150, 105, 0.12);
+  border-color: #a7f3d0;
+}
+.transport-card.enhanced .transport-icon {
+  background: #ecfdf3;
+  padding: 10px;
+  border-radius: 14px;
+  min-width: 90px;
+}
+.transport-card.enhanced .transport-route {
+  gap: 10px;
+}
+.transport-card.enhanced .route-from,
+.transport-card.enhanced .route-to {
+  font-size: 1rem;
+  color: #0f172a;
+}
+.transport-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.transport-pill {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.transport-pill.available {
+  background: #ecfdf3;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+.transport-card.enhanced .transport-price {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  padding: 12px;
+  border-radius: 12px;
+  min-width: 140px;
+  text-align: right;
+}
+.transport-card.enhanced .price {
+  color: #059669;
+}
+@media (max-width: 980px) {
+  .transport-page .filter-form {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 680px) {
+  .transport-page .filter-form {
+    grid-template-columns: 1fr;
+  }
+  .transport-card.enhanced {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .transport-card.enhanced .transport-price {
+    width: 100%;
+    text-align: left;
+  }
+}
+</style>
+
 <section class="section">
-  <div class="container">
+  <div class="container transport-page">
+    <% const listReturn = '/transport'
+      + (locals.from ? ('?from=' + encodeURIComponent(locals.from)) : '')
+      + (locals.to ? (locals.from ? '&' : '?') + ('to=' + encodeURIComponent(locals.to)) : '')
+      + (locals.type ? ((locals.from || locals.to) ? '&' : '?') + ('type=' + encodeURIComponent(locals.type)) : '');
+    %>
     <% if (locals.success_msg && success_msg.length) { %>
       <div class="alert alert-success"><%= success_msg[0] %></div>
     <% } %>
@@ -25,16 +179,37 @@
         <option value="<%= t %>" <%= locals.type===t?'selected':'' %>><%= t %></option>
         <% }) %>
       </select>
+      <% if (locals.returnTo) { %>
+      <input type="hidden" name="return" value="<%= returnTo %>"/>
+      <% } %>
       <button type="submit" class="btn-primary"><i class="fas fa-search"></i> Search</button>
-      <a href="/transport" class="btn-outline">Clear</a>
+      <a href="/transport<%= returnTo ? ('?return=' + encodeURIComponent(returnTo)) : '' %>" class="btn-outline">Clear</a>
     </form>
 
     <% if (locals.user) { %>
-      <div class="alert alert-success">
-        Wallet Balance: <strong>BDT <%= (walletBalance || 0).toLocaleString() %></strong>
+      <div class="transport-toolbar">
+        <div class="wallet-badge">Wallet Balance: BDT <%= (walletBalance || 0).toLocaleString() %></div>
       </div>
 
-      <div class="exchange-section">
+      <div class="section-tabs" id="transportTabs">
+        <button type="button" class="section-tab active" data-target="panel-available">
+          Available Tickets <span class="count"><%= (transports || []).length %></span>
+        </button>
+        <button type="button" class="section-tab" data-target="panel-tickets">
+          My Tickets <span class="count"><%= (myTransportTickets || []).length %></span>
+        </button>
+        <button type="button" class="section-tab" data-target="panel-incoming">
+          Incoming Requests <span class="count"><%= (incomingExchangeRequests || []).length %></span>
+        </button>
+        <button type="button" class="section-tab" data-target="panel-released">
+          Released Exchange <span class="count"><%= (releasedTickets || []).length %></span>
+        </button>
+        <button type="button" class="section-tab" data-target="panel-myrequests">
+          My Requests <span class="count"><%= (myExchangeRequests || []).length %></span>
+        </button>
+      </div>
+
+      <div class="exchange-section section-panel" id="panel-tickets">
         <div class="exchange-title-row">
           <h3><i class="fas fa-ticket"></i> My Transport Tickets</h3>
           <small>Only admin-confirmed tickets can be released. Exchange window: within 3 days and before 3 hours of departure.</small>
@@ -86,7 +261,7 @@
         <% } %>
       </div>
 
-      <div class="exchange-section">
+      <div class="exchange-section section-panel" id="panel-incoming">
         <div class="exchange-title-row">
           <h3><i class="fas fa-user-check"></i> Incoming Exchange Requests</h3>
           <small>Only ticket owner can accept or reject request.</small>
@@ -120,7 +295,7 @@
         <% } %>
       </div>
 
-      <div class="exchange-section">
+      <div class="exchange-section section-panel" id="panel-released">
         <div class="exchange-title-row">
           <h3><i class="fas fa-right-left"></i> Released Tickets Exchange</h3>
           <small>Claim only within 3 days and before 3 hours of departure.</small>
@@ -163,7 +338,7 @@
         <% } %>
       </div>
 
-      <div class="exchange-section">
+      <div class="exchange-section section-panel" id="panel-myrequests">
         <div class="exchange-title-row">
           <h3><i class="fas fa-receipt"></i> My Exchange Requests</h3>
           <small>Track accepted/rejected requests and payment state.</small>
@@ -189,107 +364,66 @@
       </div>
     <% } %>
 
-    <div class="transport-list">
-      <% transports.forEach(t => { %>
-      <div class="transport-card">
-        <div class="transport-icon">
-          <% if(t.type==='Bus') { %><i class="fas fa-bus"></i>
-          <% } else if(t.type==='Train') { %><i class="fas fa-train"></i>
-          <% } else if(t.type==='Air') { %><i class="fas fa-plane"></i>
-          <% } else { %><i class="fas fa-ship"></i><% } %>
-          <span class="transport-type"><%= t.type %></span>
+    <div class="section-panel active" id="panel-available">
+      <div class="transport-list">
+        <% transports.forEach(t => { %>
+        <div class="transport-card enhanced">
+          <div class="transport-icon">
+            <% if(t.type==='Bus') { %><i class="fas fa-bus"></i>
+            <% } else if(t.type==='Train') { %><i class="fas fa-train"></i>
+            <% } else if(t.type==='Air') { %><i class="fas fa-plane"></i>
+            <% } else { %><i class="fas fa-ship"></i><% } %>
+            <span class="transport-type"><%= t.type %></span>
+          </div>
+          <div class="transport-route">
+            <div class="route-from"><strong><%= t.from_location %></strong></div>
+            <div class="route-arrow"><i class="fas fa-long-arrow-alt-right"></i></div>
+            <div class="route-to"><strong><%= t.to_location %></strong></div>
+          </div>
+          <div class="transport-info">
+            <p><i class="fas fa-building"></i> <%= t.company %></p>
+            <p><i class="fas fa-clock"></i> Departs: <%= t.departure_time %></p>
+            <div class="transport-meta">
+              <span class="transport-pill available"><i class="fas fa-chair"></i> <%= t.seats_available %> seats left</span>
+              <span class="transport-pill"><i class="fas fa-calendar-alt"></i> Daily</span>
+            </div>
+          </div>
+          <div class="transport-price">
+            <div class="price">BDT <%= t.price %></div>
+            <div class="price-label">per person</div>
+            <% if (locals.user) { %>
+            <a href="/transport/<%= t.id %>?return=<%= encodeURIComponent(listReturn) %>" class="btn-sm">View Details</a>
+            <% } else { %>
+            <a href="/auth/login" class="btn-sm">Login</a>
+            <% } %>
+          </div>
         </div>
-        <div class="transport-route">
-          <div class="route-from"><strong><%= t.from_location %></strong></div>
-          <div class="route-arrow"><i class="fas fa-long-arrow-alt-right"></i></div>
-          <div class="route-to"><strong><%= t.to_location %></strong></div>
+        <% }) %>
+        <% if (transports.length === 0) { %>
+        <div class="empty-state">
+          <i class="fas fa-search"></i>
+          <h3>No transport found</h3>
+          <p>Try different search parameters</p>
         </div>
-        <div class="transport-info">
-          <p><i class="fas fa-building"></i> <%= t.company %></p>
-          <p><i class="fas fa-clock"></i> Departs: <%= t.departure_time %></p>
-          <p><i class="fas fa-chair"></i> <%= t.seats_available %> seats left</p>
-        </div>
-        <div class="transport-price">
-          <div class="price">BDT <%= t.price %></div>
-          <div class="price-label">per person</div>
-          <% if (locals.user) { %>
-          <button
-            class="btn-sm"
-            data-transport-id="<%= t.id %>"
-            data-transport-name="<%= t.company %> - <%= t.from_location %> to <%= t.to_location %>"
-            data-transport-price="<%= t.price %>"
-            onclick="openTransportBook(this)"
-          >Book</button>
-          <% } else { %>
-          <a href="/auth/login" class="btn-sm">Login</a>
-          <% } %>
-        </div>
+        <% } %>
       </div>
-      <% }) %>
-      <% if (transports.length === 0) { %>
-      <div class="empty-state">
-        <i class="fas fa-search"></i>
-        <h3>No transport found</h3>
-        <p>Try different search parameters</p>
-      </div>
-      <% } %>
     </div>
   </div>
 </section>
 
-<!-- Transport Booking Modal -->
-<div id="transportModal" class="modal" style="display:none">
-  <div class="modal-box">
-    <div class="modal-header">
-      <h3>Book Transport</h3>
-      <button onclick="document.getElementById('transportModal').style.display='none'" class="modal-close">&times;</button>
-    </div>
-    <form action="/book/transport" method="POST" class="modal-form js-payment-form">
-      <input type="hidden" name="transport_id" id="t_id"/>
-      <input type="hidden" name="transport_name" id="t_name"/>
-      <input type="hidden" name="total_price" id="t_total"/>
-      <div class="form-group">
-        <label>Route</label>
-        <input type="text" id="t_display" readonly class="form-control"/>
-      </div>
-      <div class="form-group">
-        <label>Travel Date</label>
-        <input type="date" name="travel_date" class="form-control" required/>
-      </div>
-      <div class="form-group">
-        <label>Number of Tickets</label>
-        <input type="number" name="persons" id="t_persons" value="1" min="1" max="10" class="form-control" oninput="calcTransportPrice()"/>
-      </div>
-      <div class="price-display" id="tPriceDisplay"></div>
-      <button type="submit" class="btn-primary btn-block">Confirm Booking</button>
-    </form>
-  </div>
-</div>
-
 <script>
-let tPrice = 0;
-const today = new Date().toISOString().split('T')[0];
-document.querySelector('[name="travel_date"]').min = today;
-
-function openTransportBook(btn) {
-  const id = btn.getAttribute('data-transport-id');
-  const name = btn.getAttribute('data-transport-name');
-  const price = Number(btn.getAttribute('data-transport-price') || 0);
-  tPrice = price;
-  document.getElementById('t_id').value = id;
-  document.getElementById('t_name').value = name;
-  document.getElementById('t_display').value = name;
-  document.getElementById('t_persons').value = 1;
-  document.getElementById('transportModal').style.display = 'flex';
-  calcTransportPrice();
-}
-function calcTransportPrice() {
-  const p = parseInt(document.getElementById('t_persons').value) || 1;
-  const total = p * tPrice;
-  document.getElementById('t_total').value = total;
-  document.getElementById('tPriceDisplay').innerHTML = `BDT ${tPrice} x ${p} = <strong>BDT ${total}</strong>`;
+const tabWrap = document.getElementById('transportTabs');
+if (tabWrap) {
+  tabWrap.addEventListener('click', (e) => {
+    const btn = e.target.closest('.section-tab');
+    if (!btn) return;
+    const targetId = btn.getAttribute('data-target');
+    document.querySelectorAll('.section-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.section-panel').forEach(p => p.classList.remove('active'));
+    const panel = document.getElementById(targetId);
+    if (panel) panel.classList.add('active');
+  });
 }
 </script>
-
-<%- include('../partials/payment-modal') %>
 <%- include('../partials/footer') %>

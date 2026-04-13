@@ -1,0 +1,522 @@
+<%- include('../partials/header') %>
+
+<section class="page-header">
+  <div class="container">
+    <a href="<%= returnTo || '/transport' %>" class="btn-back"><i class="fas fa-arrow-left"></i> Back to Transport</a>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <% if (locals.success_msg && success_msg.length) { %>
+      <div class="alert alert-success"><%= success_msg[0] %></div>
+    <% } %>
+    <% if (locals.error_msg && error_msg.length) { %>
+      <div class="alert alert-danger"><%= error_msg[0] %></div>
+    <% } %>
+
+    <div class="detail-layout">
+      <div class="detail-main">
+        <div class="detail-info">
+          <div class="detail-info-header">
+            <div>
+              <h1><%= transport.company || transport.type %></h1>
+              <p class="detail-location"><i class="fas fa-route"></i> <%= transport.from_location %> &rarr; <%= transport.to_location %></p>
+              <p class="muted-text" style="margin-top:6px;"><i class="fas fa-clock"></i> Departs: <%= transport.departure_time %></p>
+            </div>
+            <div class="detail-rating"><i class="fas fa-ticket"></i> <%= transport.seats_available %> seats left</div>
+          </div>
+
+          <div class="info-pills">
+            <span><i class="fas fa-bus"></i> Type: <%= transport.type %></span>
+            <span><i class="fas fa-money-bill-wave"></i> Price: BDT <%= (transport.price || 0).toLocaleString() %></span>
+          </div>
+
+          <div class="reviews-section" style="margin-top:16px;">
+            <h2><i class="fas fa-chair"></i> Select Seats</h2>
+            <div class="seat-legend">
+              <span class="seat-dot seat-dot-available"></span> Available
+              <span class="seat-dot seat-dot-selected"></span> Selected
+              <span class="seat-dot seat-dot-booked"></span> Booked
+              <span class="seat-dot seat-dot-reserved"></span> Reserved (Women)
+            </div>
+            <div id="reservedAlert" class="alert-warning" style="display:none;">
+              Reserved seats are for women only. If a man buys these seats, he cannot sit there and no refund will be given.
+            </div>
+
+            <div class="seat-shell">
+              <div class="seat-header">
+                <span class="seat-title"><%= transport.type %> Seating</span>
+                <span class="seat-sub"><%= transport.company || 'Transport' %></span>
+              </div>
+              <div id="seatMap" class="seat-map" data-type="<%= (transport.type || '').toLowerCase() %>"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="detail-sidebar">
+        <div class="sidebar-block">
+          <div class="sidebar-head">
+            <h3><i class="fas fa-receipt"></i> Booking Summary</h3>
+          </div>
+          <div class="sidebar-item-top">
+            <strong>Route</strong>
+            <span><%= transport.from_location %> &rarr; <%= transport.to_location %></span>
+          </div>
+          <div class="sidebar-item-top">
+            <strong>Price</strong>
+            <span>BDT <%= (transport.price || 0).toLocaleString() %> / seat</span>
+          </div>
+          <div class="sidebar-item-top">
+            <strong>Selected Seats</strong>
+            <span id="selectedSeatList">None</span>
+          </div>
+          <div class="sidebar-item-top">
+            <strong>Total</strong>
+            <span id="seatTotal">BDT 0</span>
+          </div>
+        </div>
+
+        <div class="sidebar-block">
+          <div class="sidebar-head">
+            <h3><i class="fas fa-ticket"></i> Book Now</h3>
+          </div>
+          <% if (locals.user) { %>
+          <form action="/book/transport" method="POST" class="modal-form js-payment-form">
+            <input type="hidden" name="transport_id" value="<%= transport.id %>"/>
+            <input type="hidden" name="transport_name" value="<%= transport.company || transport.type %>"/>
+            <input type="hidden" name="total_price" id="t_total_price" value="0"/>
+            <input type="hidden" name="persons" id="t_persons" value="0"/>
+            <input type="hidden" name="seat_numbers" id="t_seat_numbers" value=""/>
+            <input type="hidden" name="return_to" value="<%= returnTo || '' %>"/>
+
+            <div class="form-group">
+              <label>Travel Date</label>
+              <input type="date" name="travel_date" id="t_travel_date" class="form-control" required/>
+            </div>
+            <button type="submit" class="btn-primary btn-block" id="seatSubmit" disabled>Confirm Booking</button>
+          </form>
+          <% } else { %>
+            <a href="/auth/login" class="btn-primary btn-block">Login to Book</a>
+          <% } %>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<style>
+.seat-legend {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 0.85rem;
+  margin: 8px 0 14px;
+  color: #64748b;
+  flex-wrap: wrap;
+}
+.seat-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  display: inline-block;
+  margin-right: 6px;
+}
+.seat-dot-available { background: #d1fae5; border: 1px solid #86efac; }
+.seat-dot-selected { background: #059669; border: 1px solid #047857; }
+.seat-dot-booked { background: #e5e7eb; border: 1px solid #cbd5f5; }
+.seat-dot-reserved { background: #fef3c7; border: 1px solid #f59e0b; }
+.alert-warning {
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #f59e0b;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  margin: 10px 0 6px;
+}
+
+.seat-shell {
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 14px;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+}
+.seat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.seat-title {
+  font-weight: 800;
+  color: #0f172a;
+}
+.seat-sub {
+  color: #059669;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.seat-map {
+  display: grid;
+  gap: 10px;
+}
+.seat-front {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f1f5f9;
+  border: 1px dashed #cbd5f5;
+}
+.front-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #64748b;
+}
+.driver-seat,
+.door-marker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid #dbe4f3;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+.door-marker {
+  color: #0f766e;
+  border-color: #99f6e4;
+  background: #ecfeff;
+}
+.seat-row {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+}
+.seat-row .row-label {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  font-weight: 700;
+  text-align: center;
+}
+.seat-group {
+  display: grid;
+  gap: 6px;
+  grid-auto-flow: column;
+}
+.seat-aisle {
+  width: 18px;
+}
+.seat-tile {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid #cbd5f5;
+  background: #f8fafc;
+  color: #0f172a;
+  font-weight: 700;
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.seat-tile input { display: none; }
+.seat-tile.available {
+  background: #ecfdf3;
+  border-color: #a7f3d0;
+  color: #047857;
+}
+.seat-tile.available:hover { transform: translateY(-1px); box-shadow: 0 6px 14px rgba(5, 150, 105, 0.2); }
+.seat-tile.selected {
+  background: #059669;
+  border-color: #047857;
+  color: #ffffff;
+}
+.seat-tile.booked {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+.seat-tile.reserved {
+  background: #e8fdf2;
+  border-color: #059669;
+  color: #047857;
+  cursor: not-allowed;
+}
+.seat-tile.reserved.allowed {
+  cursor: pointer;
+  background: #d1fae5;
+  border-color: #059669;
+  color: #047857;
+}
+.seat-tile.reserved.allowed:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(5, 150, 105, 0.25);
+}
+.seat-tile.reserved.selected {
+  background: #059669;
+  border-color: #047857;
+  color: #ffffff;
+}
+.seat-tile .seat-badge {
+  position: absolute;
+  top: -8px;
+  right: -6px;
+  background: #059669;
+  color: #ffffff;
+  font-size: 0.6rem;
+  padding: 2px 4px;
+  border-radius: 6px;
+}
+
+.seat-map.bus .seat-row { grid-template-columns: 44px auto 18px auto; }
+.seat-map.train .seat-row { grid-template-columns: 44px auto 18px auto; }
+.seat-map.air .seat-row { grid-template-columns: 44px auto 18px auto; }
+.seat-map.launch .seat-row { grid-template-columns: 44px auto 18px auto; }
+
+.seat-map .row-label {
+  background: #f1f5f9;
+  border-radius: 8px;
+  padding: 4px 6px;
+}
+</style>
+
+<script>
+const seatPrice = Number("<%= transport.price || 0 %>");
+const seatData = <%- JSON.stringify(seats || []) %>;
+const isFemale = "<%= (user && user.gender) ? String(user.gender).toLowerCase() : '' %>" === 'female';
+const selectedSeats = new Set();
+const seatTotalEl = document.getElementById('seatTotal');
+const selectedListEl = document.getElementById('selectedSeatList');
+const seatNumbersInput = document.getElementById('t_seat_numbers');
+const seatPersonsInput = document.getElementById('t_persons');
+const seatTotalInput = document.getElementById('t_total_price');
+const seatSubmit = document.getElementById('seatSubmit');
+const seatMap = document.getElementById('seatMap');
+const travelDate = document.getElementById('t_travel_date');
+if (travelDate) {
+  const today = new Date().toISOString().split('T')[0];
+  travelDate.min = today;
+}
+
+const seatByNo = new Map(seatData.map(s => [String(s.seat_no), s]));
+const reservedWomenSeats = new Set();
+
+function initReservedSeats(type) {
+  reservedWomenSeats.clear();
+  if (!type.includes('bus')) return;
+  for (let i = 0; i < Math.min(4, seatData.length); i += 1) {
+    reservedWomenSeats.add(String(seatData[i].seat_no));
+  }
+}
+
+function updateSummary() {
+  const list = Array.from(selectedSeats);
+  const total = list.length * seatPrice;
+  const hasReserved = list.some(s => reservedWomenSeats.has(String(s)));
+  const reservedAlert = document.getElementById('reservedAlert');
+  if (reservedAlert) {
+    reservedAlert.style.display = (!isFemale && hasReserved) ? 'block' : 'none';
+  }
+  selectedListEl.textContent = list.length ? list.join(', ') : 'None';
+  seatTotalEl.textContent = `BDT ${total.toLocaleString()}`;
+  if (seatNumbersInput) seatNumbersInput.value = list.join(',');
+  if (seatPersonsInput) seatPersonsInput.value = list.length;
+  if (seatTotalInput) seatTotalInput.value = total;
+  if (seatSubmit) seatSubmit.disabled = list.length === 0;
+}
+
+function buildSeatTile(seatNo, label, opts = {}) {
+  const seat = seatByNo.get(String(seatNo));
+  const isBooked = seat && Number(seat.is_booked) === 1;
+  const isReserved = reservedWomenSeats.has(String(seatNo));
+  const reservedLocked = false;
+  const tile = document.createElement('label');
+  tile.className = `seat-tile ${isBooked ? 'booked' : (isReserved ? 'reserved' : 'available')}`;
+  if (isReserved) tile.classList.add('allowed');
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.value = seatNo;
+  input.disabled = isBooked || reservedLocked;
+  input.addEventListener('change', () => {
+    if (input.checked) {
+      selectedSeats.add(seatNo);
+      tile.classList.add('selected');
+    } else {
+      selectedSeats.delete(seatNo);
+      tile.classList.remove('selected');
+    }
+    updateSummary();
+  });
+  const span = document.createElement('span');
+  span.textContent = label || seatNo;
+  tile.appendChild(input);
+  tile.appendChild(span);
+  if (isReserved) {
+    const badge = document.createElement('span');
+    badge.className = 'seat-badge';
+    badge.textContent = 'R';
+    tile.appendChild(badge);
+  }
+  return tile;
+}
+
+function makeRow(label, leftSeats, rightSeats, opts = {}) {
+  const row = document.createElement('div');
+  row.className = 'seat-row';
+  const rowLabel = document.createElement('div');
+  rowLabel.className = 'row-label';
+  rowLabel.textContent = label;
+  const left = document.createElement('div');
+  left.className = 'seat-group';
+  leftSeats.forEach((s, idx) => left.appendChild(buildSeatTile(s.no, s.label, { windowSide: (opts.window && idx === 0) ? 'left' : null })));
+  const aisle = document.createElement('div');
+  aisle.className = 'seat-aisle';
+  const right = document.createElement('div');
+  right.className = 'seat-group';
+  rightSeats.forEach((s, idx) => right.appendChild(buildSeatTile(s.no, s.label, { windowSide: (opts.window && idx === rightSeats.length - 1) ? 'right' : null })));
+  row.appendChild(rowLabel);
+  row.appendChild(left);
+  row.appendChild(aisle);
+  row.appendChild(right);
+  return row;
+}
+
+function renderBus() {
+  seatMap.classList.add('bus');
+  const front = document.createElement('div');
+  front.className = 'seat-front';
+  front.innerHTML = `
+    <span class="door-marker"><i class="fas fa-door-open"></i> Door</span>
+    <span class="front-label">Front</span>
+    <span class="driver-seat"><i class="fas fa-steering-wheel"></i> Driver</span>
+  `;
+  seatMap.appendChild(front);
+
+  const rows = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  const total = seatData.length;
+  let idx = 0;
+  let rowIndex = 0;
+  while (idx < total) {
+    const remaining = total - idx;
+    if (remaining <= 5) {
+      const label = rows[rowIndex] || `R${rowIndex + 1}`;
+      const all = [];
+      for (let i = 0; i < remaining; i += 1) {
+        const seatNo = seatData[idx + i].seat_no;
+        all.push({ no: seatNo, label: `${label}-${i + 1}` });
+      }
+      seatMap.appendChild(makeRow(label, all.slice(0, Math.ceil(all.length / 2)), all.slice(Math.ceil(all.length / 2)), { window: true }));
+      break;
+    }
+    const label = rows[rowIndex] || `R${rowIndex + 1}`;
+    const left = [];
+    const right = [];
+    for (let i = 0; i < 2; i += 1) {
+      const seatNo = seatData[idx++].seat_no;
+      left.push({ no: seatNo, label: `${label}-${i + 1}` });
+    }
+    for (let i = 0; i < 2; i += 1) {
+      const seatNo = seatData[idx++].seat_no;
+      right.push({ no: seatNo, label: `${label}-${i + 3}` });
+    }
+    seatMap.appendChild(makeRow(label, left, right, { window: true }));
+    rowIndex += 1;
+  }
+}
+
+function renderTrain() {
+  seatMap.classList.add('train');
+  const rows = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  let idx = 0;
+  let rowIndex = 0;
+  while (idx < seatData.length) {
+    const label = rows[rowIndex] || `R${rowIndex + 1}`;
+    const left = [];
+    const right = [];
+    for (let i = 0; i < 2 && idx < seatData.length; i += 1) {
+      const seatNo = seatData[idx++].seat_no;
+      left.push({ no: seatNo, label: `${label}-${i + 1}` });
+    }
+    for (let i = 0; i < 2 && idx < seatData.length; i += 1) {
+      const seatNo = seatData[idx++].seat_no;
+      right.push({ no: seatNo, label: `${label}-${i + 3}` });
+    }
+    seatMap.appendChild(makeRow(label, left, right, { window: true }));
+    rowIndex += 1;
+  }
+}
+
+function renderAir() {
+  seatMap.classList.add('air');
+  const lettersLeft = ['A', 'B', 'C'];
+  const lettersRight = ['D', 'E', 'F'];
+  let idx = 0;
+  let rowNumber = 1;
+  while (idx < seatData.length) {
+    const left = [];
+    const right = [];
+    for (let i = 0; i < 3 && idx < seatData.length; i += 1) {
+      const seatNo = seatData[idx++].seat_no;
+      left.push({ no: seatNo, label: `${rowNumber}${lettersLeft[i]}` });
+    }
+    for (let i = 0; i < 3 && idx < seatData.length; i += 1) {
+      const seatNo = seatData[idx++].seat_no;
+      right.push({ no: seatNo, label: `${rowNumber}${lettersRight[i]}` });
+    }
+    seatMap.appendChild(makeRow(String(rowNumber), left, right, { window: true }));
+    rowNumber += 1;
+  }
+}
+
+function renderLaunch() {
+  seatMap.classList.add('launch');
+  const rows = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  let idx = 0;
+  let rowIndex = 0;
+  while (idx < seatData.length) {
+    const label = rows[rowIndex] || `R${rowIndex + 1}`;
+    const left = [];
+    const right = [];
+    for (let i = 0; i < 2 && idx < seatData.length; i += 1) {
+      const seatNo = seatData[idx++].seat_no;
+      left.push({ no: seatNo, label: `${label}-${i + 1}` });
+    }
+    for (let i = 0; i < 2 && idx < seatData.length; i += 1) {
+      const seatNo = seatData[idx++].seat_no;
+      right.push({ no: seatNo, label: `${label}-${i + 3}` });
+    }
+    seatMap.appendChild(makeRow(label, left, right, { window: true }));
+    rowIndex += 1;
+  }
+}
+
+function renderSeats() {
+  if (!seatMap) return;
+  const type = (seatMap.dataset.type || '').toLowerCase();
+  initReservedSeats(type);
+  if (type.includes('air')) return renderAir();
+  if (type.includes('train')) return renderTrain();
+  if (type.includes('launch')) return renderLaunch();
+  return renderBus();
+}
+
+renderSeats();
+updateSummary();
+</script>
+
+<%- include('../partials/payment-modal') %>
+<%- include('../partials/footer') %>

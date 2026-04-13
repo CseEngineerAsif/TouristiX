@@ -1,0 +1,47 @@
+<%- include('../partials/header') %>
+
+<section class="auth-section">
+  <div class="auth-card">
+    <h2>Partner Registration</h2>
+    <p class="muted-text">Register as a hotel, transport, or guide partner.</p>
+
+    <% if (error && error.length) { %>
+      <div class="alert alert-danger"><%= error[0] %></div>
+    <% } %>
+
+    <form action="/partner/register" method="POST">
+      <div class="form-group">
+        <label>Partner Type</label>
+        <select name="provider_type" required class="form-control">
+          <option value="">Select type</option>
+          <option value="hotel">Hotel Partner</option>
+          <option value="transport">Transport Partner</option>
+          <option value="guide">Tour Guide Partner</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Full Name</label>
+        <input type="text" name="name" required class="form-control" placeholder="Your name"/>
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" name="email" required class="form-control" placeholder="you@example.com"/>
+      </div>
+      <div class="form-group">
+        <label>Phone</label>
+        <input type="text" name="phone" class="form-control" placeholder="01XXXXXXXXX"/>
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" name="password" required class="form-control" placeholder="Create a password"/>
+      </div>
+      <button type="submit" class="btn-primary btn-block">Create Provider Account</button>
+    </form>
+
+    <p class="muted-text" style="margin-top:12px;">
+      Already have an account? <a href="/partner/login">Login here</a>
+    </p>
+  </div>
+</section>
+
+<%- include('../partials/footer') %>

@@ -376,6 +376,11 @@ button[disabled] { opacity: 0.55; cursor: not-allowed; }
 .auth-form-container { width: 100%; max-width: 420px; }
 .auth-form-container h2 { font-size: 1.8rem; font-weight: 800; margin-bottom: 4px; }
 .auth-form-container > p { color: var(--text-muted); margin-bottom: 28px; }
+.auth-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+.auth-tab { border: 1px solid var(--border); background: var(--white); padding: 10px 12px; border-radius: 10px; font-weight: 700; color: var(--text); cursor: pointer; }
+.auth-tab.active { border-color: var(--primary); background: var(--primary-light); color: var(--primary-dark); box-shadow: var(--shadow); }
+.auth-form.auth-tab-panel { display: none; }
+.auth-form.auth-tab-panel.active { display: flex; }
 .auth-form { display: flex; flex-direction: column; gap: 16px; margin-bottom: 20px; }
 .auth-switch { text-align: center; color: var(--text-muted); font-size: 0.875rem; }
 .auth-switch a { color: var(--primary); font-weight: 700; }

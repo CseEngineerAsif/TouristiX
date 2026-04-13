@@ -38,6 +38,15 @@
       <button onclick="document.getElementById('addHotelModal').style.display='none'" class="modal-close">&times;</button>
     </div>
     <form action="/admin/hotels/add" method="POST" enctype="multipart/form-data" class="modal-form">
+      <div class="form-group">
+        <label>Owner (optional)</label>
+        <select name="owner_user_id" class="form-control">
+          <option value="">Unassigned</option>
+          <% (owners || []).forEach(o => { %>
+            <option value="<%= o.id %>"><%= o.name %> (<%= o.email %>)</option>
+          <% }) %>
+        </select>
+      </div>
       <div class="form-row">
         <div class="form-group"><label>Hotel Name</label><input type="text" name="name" required class="form-control"/></div>
         <div class="form-group"><label>District</label><input type="text" name="district" required class="form-control"/></div>

@@ -28,7 +28,12 @@
       <p>Sign in to your TouristiX account</p>
       <% if (error && error.length > 0) { %><div class="alert alert-danger"><%= error %></div><% } %>
       <% if (success && success.length > 0) { %><div class="alert alert-success"><%= success %></div><% } %>
-      <form action="/auth/login" method="POST" class="auth-form">
+      <div class="auth-tabs">
+        <button type="button" class="auth-tab active" data-target="user-login">User Login</button>
+        <button type="button" class="auth-tab" data-target="partner-login">Partner Login</button>
+      </div>
+
+      <form action="/auth/login" method="POST" class="auth-form auth-tab-panel active" id="user-login">
         <div class="form-group">
           <label><i class="fas fa-envelope"></i> Gmail</label>
           <input type="email" name="email" placeholder="your@gmail.com" required class="form-control"/>
@@ -39,12 +44,41 @@
         </div>
         <button type="submit" class="btn-primary btn-block">Sign In</button>
       </form>
+
+      <form action="/partner/login" method="POST" class="auth-form auth-tab-panel" id="partner-login">
+        <div class="form-group">
+          <label><i class="fas fa-envelope"></i> Gmail</label>
+          <input type="email" name="email" placeholder="partner@gmail.com" required class="form-control"/>
+        </div>
+        <div class="form-group">
+          <label><i class="fas fa-lock"></i> Password</label>
+          <input type="password" name="password" placeholder="Enter your password" required class="form-control"/>
+        </div>
+        <button type="submit" class="btn-primary btn-block">Sign In</button>
+      </form>
+
       <p class="auth-switch">Don't have an account? <a href="/auth/register">Register</a></p>
-      <div class="admin-hint">
-        <small><i class="fas fa-info-circle"></i> Admin: admin@touristix.com / admin123</small>
-      </div>
     </div>
   </div>
 </div>
+<script>
+(() => {
+  const tabs = document.querySelectorAll('.auth-tab');
+  const panels = document.querySelectorAll('.auth-tab-panel');
+  const activate = (targetId) => {
+    tabs.forEach(t => t.classList.remove('active'));
+    panels.forEach(p => p.classList.remove('active'));
+    const tab = Array.from(tabs).find(t => t.dataset.target === targetId) || tabs[0];
+    const panel = document.getElementById(targetId) || panels[0];
+    if (tab) tab.classList.add('active');
+    if (panel) panel.classList.add('active');
+  };
+  tabs.forEach((tab) => {
+    tab.addEventListener('click', () => activate(tab.dataset.target));
+  });
+  const tabParam = new URLSearchParams(window.location.search).get('tab');
+  if (tabParam === 'partner') activate('partner-login');
+})();
+</script>
 </body>
 </html>

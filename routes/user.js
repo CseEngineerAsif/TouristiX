@@ -52,6 +52,29 @@ const uploadReviewPhoto = multer({
   limits: { fileSize: 3 * 1024 * 1024 }
 });
 
+const blogMediaStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(__dirname, '../public/uploads');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    cb(null, `blog-${Date.now()}-${Math.floor(Math.random() * 10000)}${ext}`);
+  }
+});
+
+const uploadBlogMedia = multer({
+  storage: blogMediaStorage,
+  fileFilter: (req, file, cb) => {
+    const allowedExt = ['.jpg', '.jpeg', '.png', '.webp', '.mp4', '.webm', '.mov'];
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    if (!allowedExt.includes(ext)) return cb(new Error('Only images (JPG, PNG, WEBP) and videos (MP4, WEBM, MOV) are allowed.'));
+    cb(null, true);
+  },
+  limits: { fileSize: 15 * 1024 * 1024 }
+});
+
 function getTravelDateTime(travelDate, departureTime) {
   if (!travelDate || !departureTime) return null;
 
@@ -131,6 +154,67 @@ function normalizePaymentTxnId(txnId) {
 function buildGatewayRef(method) {
   const prefix = method === 'bkash' ? 'BK' : 'NG';
   return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`;
+}
+
+const USER_FEE_RATE = 0.01;
+const COMMISSION_RATES = {
+  hotel: 0.10,
+  transport: 0.10,
+  guide: 0.03,
+  package: 0
+};
+
+function calcUserFee(amount) {
+  const fee = Math.ceil(Number(amount || 0) * USER_FEE_RATE);
+  return Number.isFinite(fee) ? fee : 0;
+}
+
+function commissionRateFor(type) {
+  return COMMISSION_RATES[type] ?? 0;
+}
+
+function recordWalletTx(userId, amount, type, refType, refId, note, cb) {
+  db.run(
+    "INSERT INTO wallet_transactions (user_id, amount, type, ref_type, ref_id, note) VALUES (?,?,?,?,?,?)",
+    [userId, amount, type, refType || null, refId || null, note || ''],
+    cb || (() => {})
+  );
+}
+
+function getAdminUserId(cb) {
+  db.get("SELECT id FROM users WHERE role='admin' ORDER BY id ASC LIMIT 1", (err, row) => {
+    if (err || !row) return cb(null);
+    return cb(row.id);
+  });
+}
+
+function getProviderUserId(type, itemId, cb) {
+  if (type === 'hotel') {
+    return db.get("SELECT owner_user_id FROM hotels WHERE id=?", [itemId], (err, row) => cb(err, row?.owner_user_id || null));
+  }
+  if (type === 'transport') {
+    return db.get("SELECT owner_user_id FROM transport WHERE id=?", [itemId], (err, row) => cb(err, row?.owner_user_id || null));
+  }
+  if (type === 'guide') {
+    return db.get("SELECT owner_user_id FROM guides WHERE id=?", [itemId], (err, row) => cb(err, row?.owner_user_id || null));
+  }
+  if (type === 'package') {
+    return db.get("SELECT owner_user_id FROM packages WHERE id=?", [itemId], (err, row) => {
+      if (err) return cb(err);
+      if (row && row.owner_user_id) return cb(null, row.owner_user_id);
+      return getAdminUserId((adminId) => cb(null, adminId));
+    });
+  }
+  return cb(null, null);
+}
+
+function safeReturnTo(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (!raw.startsWith('/')) return '';
+  if (raw.startsWith('//')) return '';
+  if (raw.includes('://')) return '';
+  return raw;
 }
 
 // Home
@@ -216,16 +300,24 @@ router.get('/spots/:id', (req, res) => {
 // Hotels
 router.get('/hotels', (req, res) => {
   const { district } = req.query;
+  const returnTo = safeReturnTo(req.query.return);
   let query = "SELECT * FROM hotels WHERE 1=1";
   const params = [];
   if (district) { query += " AND district LIKE ?"; params.push(`%${district}%`); }
   db.all(query, params, (err, hotels) => {
-    res.render('user/hotels', { title: 'Hotels', hotels: hotels || [], district, user: req.session.user });
+    res.render('user/hotels', {
+      title: 'Hotels',
+      hotels: hotels || [],
+      district,
+      returnTo,
+      user: req.session.user
+    });
   });
 });
 
 // Hotel Detail
 router.get('/hotels/:id', (req, res) => {
+  const returnTo = safeReturnTo(req.query.return);
   db.get("SELECT * FROM hotels WHERE id = ?", [req.params.id], (err, hotel) => {
     if (err || !hotel) return res.redirect('/hotels');
     db.all(
@@ -241,8 +333,78 @@ router.get('/hotels/:id', (req, res) => {
           hotel,
           facilities,
           relatedHotels: relatedHotels || [],
+          returnTo,
           user: req.session.user
         });
+      }
+    );
+  });
+});
+
+// Hotel Chat
+router.get('/hotels/:id/chat', isAuth, (req, res) => {
+  const hotelId = parseInt(req.params.id, 10);
+  if (!Number.isInteger(hotelId) || hotelId <= 0) return res.redirect('/hotels');
+
+  db.get("SELECT * FROM hotels WHERE id=?", [hotelId], (err, hotel) => {
+    if (err || !hotel) {
+      req.flash('error', 'Hotel not found.');
+      return res.redirect('/hotels');
+    }
+    db.all(
+      `SELECT hm.*, u.name as user_name, h.name as hotel_name
+       FROM hotel_messages hm
+       JOIN users u ON u.id = hm.user_id
+       JOIN hotels h ON h.id = hm.hotel_id
+       WHERE hm.user_id=? AND hm.hotel_id=?
+       ORDER BY hm.created_at ASC, hm.id ASC`,
+      [req.session.user.id, hotelId],
+      (err2, messages) => {
+        res.render('user/hotel-chat', {
+          title: `Chat with ${hotel.name}`,
+          hotel,
+          messages: messages || [],
+          returnTo: safeReturnTo(req.query.return),
+          user: req.session.user
+        });
+      }
+    );
+  });
+});
+
+router.post('/hotels/:id/chat', isAuth, (req, res) => {
+  const hotelId = parseInt(req.params.id, 10);
+  const text = String(req.body.message || '').trim();
+  const returnTo = safeReturnTo(req.query.return);
+  const backUrl = returnTo ? `/hotels/${hotelId}/chat?return=${encodeURIComponent(returnTo)}` : `/hotels/${hotelId}/chat`;
+  if (!Number.isInteger(hotelId) || hotelId <= 0) return res.redirect('/hotels');
+  if (!text) {
+    req.flash('error', 'Please write a message.');
+    return res.redirect(backUrl);
+  }
+
+  db.get("SELECT id, name FROM hotels WHERE id=?", [hotelId], (err, hotel) => {
+    if (err || !hotel) {
+      req.flash('error', 'Hotel not found.');
+      return res.redirect('/hotels');
+    }
+
+    const uid = req.session.user.id;
+    db.run(
+      "INSERT INTO hotel_messages (user_id, hotel_id, sender_role, message) VALUES (?,?,?,?)",
+      [uid, hotelId, 'user', text],
+      function (insertErr) {
+        if (insertErr) {
+          req.flash('error', 'Could not send message. Please try again.');
+          return res.redirect(backUrl);
+        }
+
+        const autoReply = `Thanks for your message. Our team at ${hotel.name} will respond soon.`;
+        db.run(
+          "INSERT INTO hotel_messages (user_id, hotel_id, sender_role, message) VALUES (?,?,?,?)",
+          [uid, hotelId, 'hotel', autoReply],
+          () => res.redirect(backUrl)
+        );
       }
     );
   });
@@ -251,6 +413,7 @@ router.get('/hotels/:id', (req, res) => {
 // Transport
 router.get('/transport', (req, res) => {
   const { from, to, type } = req.query;
+  const returnTo = safeReturnTo(req.query.return);
   let query = "SELECT * FROM transport WHERE 1=1";
   const params = [];
   if (from) { query += " AND from_location LIKE ?"; params.push(`%${from}%`); }
@@ -264,6 +427,7 @@ router.get('/transport', (req, res) => {
         from,
         to,
         type,
+        returnTo,
         myTransportTickets: [],
         releasedTickets: [],
         user: req.session.user
@@ -330,6 +494,7 @@ router.get('/transport', (req, res) => {
                         from,
                         to,
                         type,
+                        returnTo,
                         myTransportTickets: mappedMyTickets,
                         releasedTickets: mappedReleasedTickets,
                         incomingExchangeRequests: incomingExchangeRequests || [],
@@ -367,6 +532,7 @@ router.get('/guides/:id', (req, res) => {
           title: guide.name,
           guide,
           relatedGuides: relatedGuides || [],
+          returnTo: safeReturnTo(req.query.return),
           user: req.session.user
         });
       }
@@ -464,22 +630,110 @@ router.get('/packages/:id', (req, res) => {
   });
 });
 
+// Blog
+router.get('/blog', (req, res) => {
+  db.all(
+    `SELECT bp.*, u.name as author_name, u.avatar as author_avatar
+     FROM blog_posts bp
+     JOIN users u ON u.id = bp.user_id
+     ORDER BY bp.created_at DESC`,
+    (err, posts) => {
+      res.render('user/blog', {
+        title: 'Blog',
+        posts: posts || [],
+        user: req.session.user
+      });
+    }
+  );
+});
+
+router.post('/blog', isAuth, uploadBlogMedia.array('media', 10), (req, res) => {
+  const title = String(req.body.title || '').trim();
+  const content = String(req.body.content || '').trim();
+  if (!title || !content) {
+    req.flash('error', 'Please provide a title and your travel story.');
+    return res.redirect('/blog');
+  }
+  const media = (req.files || []).map(f => `/uploads/${f.filename}`);
+  const mediaText = media.join(',');
+
+  db.run(
+    "INSERT INTO blog_posts (user_id, title, content, media_urls) VALUES (?,?,?,?)",
+    [req.session.user.id, title, content, mediaText],
+    (err) => {
+      if (err) {
+        req.flash('error', 'Could not publish blog post. Please try again.');
+        return res.redirect('/blog');
+      }
+      req.flash('success', 'Blog post published successfully!');
+      return res.redirect('/blog');
+    }
+  );
+});
+
 // Dashboard
 router.get('/dashboard', isAuth, (req, res) => {
   const uid = req.session.user.id;
-  db.get("SELECT id, name, email, phone, address, id_type, id_document, avatar, created_at FROM users WHERE id=?", [uid], (err0, profile) => {
+  db.get("SELECT id, name, email, phone, address, id_type, id_document, avatar, created_at, wallet_balance FROM users WHERE id=?", [uid], (err0, profile) => {
     db.all("SELECT * FROM bookings WHERE user_id=? ORDER BY created_at DESC", [uid], (err, bookings) => {
       db.all("SELECT f.*, s.name, s.image, s.district FROM favorites f JOIN tourist_spots s ON f.spot_id=s.id WHERE f.user_id=?", [uid], (err2, favs) => {
-        res.render('user/dashboard', {
-          title: 'My Dashboard',
-          profile: profile || null,
-          bookings: bookings || [],
-          favorites: favs || [],
-          user: req.session.user
+        db.all("SELECT * FROM wallet_transactions WHERE user_id=? ORDER BY created_at DESC LIMIT 10", [uid], (err3, walletTx) => {
+          res.render('user/dashboard', {
+            title: 'My Dashboard',
+            profile: profile || null,
+            bookings: bookings || [],
+            favorites: favs || [],
+            walletBalance: (profile && profile.wallet_balance) || 0,
+            walletTx: walletTx || [],
+            user: req.session.user
+          });
         });
       });
     });
   });
+});
+
+// Wallet top-up
+router.post('/wallet/topup', isAuth, (req, res) => {
+  const uid = req.session.user.id;
+  const amount = parseInt(req.body.amount, 10);
+  const gateway = normalizePaymentMethod(req.body.gateway);
+
+  if (!gateway) {
+    req.flash('error', 'Please select bKash or Nagad for top-up.');
+    return res.redirect('/dashboard');
+  }
+  if (!Number.isInteger(amount) || amount <= 0) {
+    req.flash('error', 'Please enter a valid top-up amount.');
+    return res.redirect('/dashboard');
+  }
+
+  const gatewayRef = buildGatewayRef(gateway);
+  db.run(
+    "INSERT INTO wallet_topups (user_id, gateway, amount, status, gateway_ref) VALUES (?,?,?,?,?)",
+    [uid, gateway, amount, 'pending', gatewayRef],
+    function (err) {
+      if (err) {
+        req.flash('error', 'Could not initiate top-up.');
+        return res.redirect('/dashboard');
+      }
+
+      const autoApprove = String(process.env.PAYMENT_MODE || '').toLowerCase() === 'mock';
+      if (!autoApprove) {
+        req.flash('error', 'Gateway API is not configured yet. Please set credentials and switch PAYMENT_MODE=live.');
+        return res.redirect('/dashboard');
+      }
+
+      const topupId = this.lastID;
+      db.run("UPDATE wallet_topups SET status='paid', paid_at=CURRENT_TIMESTAMP WHERE id=?", [topupId], () => {
+        db.run("UPDATE users SET wallet_balance = wallet_balance + ? WHERE id=?", [amount, uid], () => {
+          recordWalletTx(uid, amount, 'topup', 'wallet_topup', topupId, `${gateway} top-up`);
+          req.flash('success', 'Wallet topped up successfully.');
+          return res.redirect('/dashboard');
+        });
+      });
+    }
+  );
 });
 
 router.post('/dashboard/profile/photo', isAuth, uploadAvatar.single('avatar'), (req, res) => {
@@ -504,39 +758,136 @@ router.post('/dashboard/profile/photo', isAuth, uploadAvatar.single('avatar'), (
 // Book Hotel
 router.post('/book/hotel', isAuth, (req, res) => {
   const {
-    hotel_id, hotel_name, check_in, check_out, persons, total_price,
-    payment_method, payment_number, payment_txn_id
+    hotel_id, hotel_name, check_in, check_out, persons, total_price, return_to
   } = req.body;
-  const method = normalizePaymentMethod(payment_method);
-  const payerNumber = normalizePaymentNumber(payment_number);
-  const txnId = normalizePaymentTxnId(payment_txn_id);
-  if (!method) {
-    req.flash('error', 'Please choose a valid payment method (bKash or Nagad).');
+  const returnTo = safeReturnTo(return_to);
+  const amount = Number(total_price || 0);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    req.flash('error', 'Invalid booking amount.');
     return res.redirect('/hotels');
   }
-  if (!payerNumber || !txnId) {
-    req.flash('error', 'Please provide a valid payment number and transaction ID.');
-    return res.redirect('/hotels');
-  }
-  const gatewayRef = buildGatewayRef(method);
-  db.run("INSERT INTO bookings (user_id, type, item_id, item_name, check_in, check_out, persons, total_price, payment_method, payment_status, payment_number, payment_txn_id, payment_gateway_ref, paid_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)",
-    [req.session.user.id, 'hotel', hotel_id, hotel_name, check_in, check_out, persons, total_price, method, 'paid', payerNumber, txnId, gatewayRef], (err) => {
-    req.flash('success', 'Hotel booked successfully!');
-    res.redirect('/dashboard');
+  const userFee = calcUserFee(amount);
+  const totalCharge = amount + userFee;
+
+  withTransaction((finish) => {
+    getProviderUserId('hotel', hotel_id, (ownerErr, ownerId) => {
+      if (ownerErr) return finish(ownerErr);
+      db.get("SELECT wallet_balance FROM users WHERE id=?", [req.session.user.id], (walletErr, me) => {
+        if (walletErr || !me) return finish(walletErr || new Error('WALLET_NOT_FOUND'));
+        if ((me.wallet_balance || 0) < totalCharge) return finish(new Error('INSUFFICIENT_BALANCE'));
+
+        db.run(
+          "UPDATE users SET wallet_balance = wallet_balance - ? WHERE id=? AND wallet_balance >= ?",
+          [totalCharge, req.session.user.id, totalCharge],
+          function (debitErr) {
+            if (debitErr || this.changes === 0) return finish(debitErr || new Error('WALLET_DEBIT_FAILED'));
+
+            db.run(
+              "INSERT INTO bookings (user_id, type, item_id, item_name, check_in, check_out, persons, total_price, payment_method, payment_status, payment_fee, escrow_status, paid_at) VALUES (?,?,?,?,?,?,?,?,?,'held',?,'held',CURRENT_TIMESTAMP)",
+              [req.session.user.id, 'hotel', hotel_id, hotel_name, check_in, check_out, persons, amount, 'wallet', userFee],
+              function (insertErr) {
+                if (insertErr) return finish(insertErr);
+                const bookingId = this.lastID;
+                const commissionRate = commissionRateFor('hotel');
+                const commissionAmount = Math.round(amount * commissionRate);
+                db.run(
+                  "INSERT INTO escrow_payments (booking_id, payer_id, provider_user_id, amount, user_fee_amount, provider_commission_rate, provider_commission_amount, status) VALUES (?,?,?,?,?,?,?,'held')",
+                  [bookingId, req.session.user.id, ownerId, amount, userFee, commissionRate, commissionAmount],
+                  function (escrowErr) {
+                    if (escrowErr) return finish(escrowErr);
+                    recordWalletTx(req.session.user.id, -totalCharge, 'booking_debit', 'booking', bookingId, 'Hotel booking');
+                    if (userFee > 0) {
+                      return getAdminUserId((adminId) => {
+                        if (!adminId) return finish(null);
+                        db.run("UPDATE users SET wallet_balance = wallet_balance + ? WHERE id=?", [userFee, adminId], () => {
+                          recordWalletTx(adminId, userFee, 'user_fee', 'booking', bookingId, 'User booking fee');
+                          return finish(null);
+                        });
+                      });
+                    }
+                    return finish(null);
+                  }
+                );
+              }
+            );
+          }
+        );
+      });
+    });
+  }, (txErr) => {
+    if (txErr) {
+      if (txErr.message === 'INSUFFICIENT_BALANCE') {
+        req.flash('error', 'Not enough wallet balance. Please top up your wallet.');
+      } else {
+        req.flash('error', 'Could not complete hotel booking. Please try again.');
+      }
+      return res.redirect('/hotels');
+    }
+    req.flash('success', 'Hotel booked successfully! Payment is held in escrow.');
+    return res.redirect(returnTo || '/dashboard');
+  });
+});
+
+router.get('/transport/:id', (req, res) => {
+  const transportId = parseInt(req.params.id, 10);
+  const returnTo = safeReturnTo(req.query.return);
+  if (!Number.isInteger(transportId) || transportId <= 0) return res.redirect('/transport');
+
+  db.get("SELECT * FROM transport WHERE id = ?", [transportId], (err, transport) => {
+    if (err || !transport) return res.redirect('/transport');
+
+    db.all(
+      "SELECT * FROM transport_seats WHERE transport_id=? ORDER BY id ASC",
+      [transportId],
+      (seatErr, seats) => {
+        const totalSeats = Number(transport.seats_available || 0);
+        if (!seatErr && (!seats || seats.length === 0) && totalSeats > 0) {
+          const stmt = db.prepare("INSERT INTO transport_seats (transport_id, seat_no, is_booked) VALUES (?,?,0)");
+          for (let i = 1; i <= totalSeats; i += 1) {
+            stmt.run([transportId, String(i)]);
+          }
+          stmt.finalize(() => {
+            db.all(
+              "SELECT * FROM transport_seats WHERE transport_id=? ORDER BY id ASC",
+              [transportId],
+              (seatErr2, seats2) => {
+                res.render('user/transport-detail', {
+                  title: `${transport.company || transport.type} - Details`,
+                  transport,
+                  seats: seats2 || [],
+                  returnTo,
+                  user: req.session.user
+                });
+              }
+            );
+          });
+          return;
+        }
+
+        res.render('user/transport-detail', {
+          title: `${transport.company || transport.type} - Details`,
+          transport,
+          seats: seats || [],
+          returnTo,
+          user: req.session.user
+        });
+      }
+    );
   });
 });
 
 // Book Transport
 router.post('/book/transport', isAuth, (req, res) => {
   const {
-    transport_id, transport_name, travel_date, persons, total_price,
-    payment_method, payment_number, payment_txn_id
+    transport_id, transport_name, travel_date, persons, return_to, seat_numbers
   } = req.body;
   const transportId = parseInt(transport_id, 10);
-  const personsCount = parseInt(persons, 10);
-  const method = normalizePaymentMethod(payment_method);
-  const payerNumber = normalizePaymentNumber(payment_number);
-  const txnId = normalizePaymentTxnId(payment_txn_id);
+  const seatList = String(seat_numbers || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+  const personsCount = seatList.length ? seatList.length : parseInt(persons, 10);
+  const returnTo = safeReturnTo(return_to);
   const validDate = /^\d{4}-\d{2}-\d{2}$/.test(String(travel_date || ''));
   const isValidPersons = Number.isInteger(personsCount) && personsCount >= 1 && personsCount <= 10;
 
@@ -552,52 +903,129 @@ router.post('/book/transport', isAuth, (req, res) => {
     req.flash('error', 'Please choose between 1 and 10 tickets.');
     return res.redirect('/transport');
   }
+  if (seatList.length === 0) {
+    req.flash('error', 'Please select at least one seat.');
+    return res.redirect('/transport');
+  }
   const todayStr = new Date().toISOString().split('T')[0];
   if (travel_date < todayStr) {
     req.flash('error', 'Travel date cannot be in the past.');
     return res.redirect('/transport');
   }
-  if (!method) {
-    req.flash('error', 'Please choose a valid payment method (bKash or Nagad).');
-    return res.redirect('/transport');
-  }
-  if (!payerNumber || !txnId) {
-    req.flash('error', 'Please provide a valid payment number and transaction ID.');
-    return res.redirect('/transport');
-  }
+  withTransaction((finish) => {
+    db.get(
+      "SELECT id, type, company, from_location, to_location, departure_time, price, seats_available, owner_user_id FROM transport WHERE id=?",
+      [transportId],
+      (err, transport) => {
+        if (err || !transport) return finish(new Error('NOT_FOUND'));
+        if ((transport.seats_available || 0) < personsCount) return finish(new Error('NOT_ENOUGH_SEATS'));
 
-  db.get(
-    "SELECT id, type, company, from_location, to_location, departure_time, price, seats_available FROM transport WHERE id=?",
-    [transportId],
-    (err, transport) => {
-      if (err || !transport) {
-        req.flash('error', 'Selected transport was not found.');
-        return res.redirect('/transport');
-      }
-      if ((transport.seats_available || 0) < personsCount) {
-        req.flash('error', `Only ${transport.seats_available || 0} ticket(s) are available for this transport.`);
-        return res.redirect('/transport');
-      }
+        const isBus = String(transport.type || '').toLowerCase().includes('bus');
+        const isFemale = String((req.session.user && req.session.user.gender) || '').toLowerCase() === 'female';
+        const reservedSet = new Set(['1', '2', '3', '4']);
+        const hasReserved = isBus && seatList.some(s => reservedSet.has(String(s)));
 
-      const gatewayRef = buildGatewayRef(method);
-      const calculatedTotal = Number(transport.price || 0) * personsCount;
-      const safeTransportName =
-        `${transport.company || transport_name || transport.type} - ${transport.from_location} to ${transport.to_location}`;
+        const placeholders = seatList.map(() => '?').join(',');
+        db.all(
+          `SELECT id, seat_no, is_booked FROM transport_seats
+           WHERE transport_id=? AND seat_no IN (${placeholders})`,
+          [transportId, ...seatList],
+          (seatErr, rows) => {
+            if (seatErr || !rows || rows.length !== seatList.length) return finish(new Error('SEAT_MISMATCH'));
+            const hasBooked = rows.some(r => r.is_booked);
+            if (hasBooked) return finish(new Error('SEAT_TAKEN'));
 
-      db.run(
-        "INSERT INTO bookings (user_id, type, item_id, item_name, check_in, persons, total_price, payment_method, payment_status, payment_number, payment_txn_id, payment_gateway_ref, paid_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)",
-        [req.session.user.id, 'transport', transport.id, safeTransportName, travel_date, personsCount, calculatedTotal, method, 'paid', payerNumber, txnId, gatewayRef],
-        function (insertErr) {
-          if (insertErr) {
-            req.flash('error', 'Could not complete transport booking. Please try again.');
-            return res.redirect('/transport');
+            const calculatedTotal = Number(transport.price || 0) * personsCount;
+            const userFee = calcUserFee(calculatedTotal);
+            const totalCharge = calculatedTotal + userFee;
+            const safeTransportName =
+              `${transport.company || transport_name || transport.type} - ${transport.from_location} to ${transport.to_location}`;
+
+            const warningNote = (!isFemale && hasReserved)
+              ? 'Reserved seats are for women only. Non-refundable and not allowed to sit in reserved seats.'
+              : null;
+            db.get("SELECT wallet_balance FROM users WHERE id=?", [req.session.user.id], (walletErr, me) => {
+              if (walletErr || !me) return finish(walletErr || new Error('WALLET_NOT_FOUND'));
+              if ((me.wallet_balance || 0) < totalCharge) return finish(new Error('INSUFFICIENT_BALANCE'));
+
+              db.run(
+                "UPDATE users SET wallet_balance = wallet_balance - ? WHERE id=? AND wallet_balance >= ?",
+                [totalCharge, req.session.user.id, totalCharge],
+                function (debitErr) {
+                  if (debitErr || this.changes === 0) return finish(debitErr || new Error('WALLET_DEBIT_FAILED'));
+
+                  db.run(
+                    "INSERT INTO bookings (user_id, type, item_id, item_name, check_in, persons, total_price, seat_numbers, notes, payment_method, payment_status, payment_fee, escrow_status, paid_at) VALUES (?,?,?,?,?,?,?,?,?,?,'held',?,'held',CURRENT_TIMESTAMP)",
+                    [req.session.user.id, 'transport', transport.id, safeTransportName, travel_date, personsCount, calculatedTotal, seatList.join(','), warningNote, 'wallet', userFee],
+                    function (insertErr) {
+                      if (insertErr) return finish(insertErr);
+                      const bookingId = this.lastID;
+                      const commissionRate = commissionRateFor('transport');
+                      const commissionAmount = Math.round(calculatedTotal * commissionRate);
+                      db.run(
+                        "INSERT INTO escrow_payments (booking_id, payer_id, provider_user_id, amount, user_fee_amount, provider_commission_rate, provider_commission_amount, status) VALUES (?,?,?,?,?,?,?,'held')",
+                        [bookingId, req.session.user.id, transport.owner_user_id || null, calculatedTotal, userFee, commissionRate, commissionAmount],
+                        function (escrowErr) {
+                          if (escrowErr) return finish(escrowErr);
+
+                          db.run(
+                            `UPDATE transport_seats
+                             SET is_booked=1, booking_id=?, booked_at=CURRENT_TIMESTAMP
+                             WHERE transport_id=? AND seat_no IN (${placeholders})`,
+                            [bookingId, transportId, ...seatList],
+                            function (seatUpdateErr) {
+                              if (seatUpdateErr) return finish(seatUpdateErr);
+                              db.run(
+                                "UPDATE transport SET seats_available = seats_available - ? WHERE id=? AND seats_available >= ?",
+                                [personsCount, transportId, personsCount],
+                                function (availErr) {
+                                  if (availErr || this.changes === 0) return finish(availErr || new Error('SEAT_UPDATE_FAIL'));
+                                  recordWalletTx(req.session.user.id, -totalCharge, 'booking_debit', 'booking', bookingId, 'Transport booking');
+                                  if (userFee > 0) {
+                                    return getAdminUserId((adminId) => {
+                                      if (!adminId) return finish(null);
+                                      db.run("UPDATE users SET wallet_balance = wallet_balance + ? WHERE id=?", [userFee, adminId], () => {
+                                        recordWalletTx(adminId, userFee, 'user_fee', 'booking', bookingId, 'User booking fee');
+                                        return finish(null);
+                                      });
+                                    });
+                                  }
+                                  return finish(null);
+                                }
+                              );
+                            }
+                          );
+                        }
+                      );
+                    }
+                  );
+                }
+              );
+            });
           }
-          req.flash('success', 'Transport booked successfully!');
-          return res.redirect('/dashboard');
-        }
-      );
+        );
+      }
+    );
+  }, (txErr) => {
+    if (txErr) {
+      if (txErr.message === 'NOT_FOUND') {
+        req.flash('error', 'Selected transport was not found.');
+      } else if (txErr.message === 'NOT_ENOUGH_SEATS') {
+        req.flash('error', 'Not enough seats available for this transport.');
+      } else if (txErr.message === 'SEAT_TAKEN') {
+        req.flash('error', 'One or more selected seats are already booked.');
+      } else if (txErr.message === 'SEAT_MISMATCH') {
+        req.flash('error', 'Selected seats are not available for this transport.');
+      } else if (txErr.message === 'INSUFFICIENT_BALANCE') {
+        req.flash('error', 'Not enough wallet balance. Please top up your wallet.');
+      } else {
+        req.flash('error', 'Could not complete transport booking. Please try again.');
+      }
+      return res.redirect('/transport');
     }
-  );
+    req.flash('success', 'Transport booked successfully! Payment is held in escrow.');
+    return res.redirect(returnTo || '/dashboard');
+  });
 });
 
 // Release transport ticket for exchange (window: within 3 days and before 3 hours of departure)
@@ -877,50 +1305,145 @@ router.post('/exchange-requests/:id/reject', isAuth, (req, res) => {
 // Book Guide
 router.post('/book/guide', isAuth, (req, res) => {
   const {
-    guide_id, guide_name, start_date, days, total_price,
-    payment_method, payment_number, payment_txn_id
+    guide_id, guide_name, start_date, days, total_price, return_to
   } = req.body;
-  const method = normalizePaymentMethod(payment_method);
-  const payerNumber = normalizePaymentNumber(payment_number);
-  const txnId = normalizePaymentTxnId(payment_txn_id);
-  if (!method) {
-    req.flash('error', 'Please choose a valid payment method (bKash or Nagad).');
+  const returnTo = safeReturnTo(return_to);
+  const amount = Number(total_price || 0);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    req.flash('error', 'Invalid booking amount.');
     return res.redirect('/guides');
   }
-  if (!payerNumber || !txnId) {
-    req.flash('error', 'Please provide a valid payment number and transaction ID.');
-    return res.redirect('/guides');
-  }
-  const gatewayRef = buildGatewayRef(method);
-  db.run("INSERT INTO bookings (user_id, type, item_id, item_name, check_in, persons, total_price, payment_method, payment_status, payment_number, payment_txn_id, payment_gateway_ref, paid_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)",
-    [req.session.user.id, 'guide', guide_id, guide_name, start_date, days, total_price, method, 'paid', payerNumber, txnId, gatewayRef], (err) => {
-    req.flash('success', 'Guide hired successfully!');
-    res.redirect('/dashboard');
+  const userFee = calcUserFee(amount);
+  const totalCharge = amount + userFee;
+
+  withTransaction((finish) => {
+    getProviderUserId('guide', guide_id, (ownerErr, ownerId) => {
+      if (ownerErr) return finish(ownerErr);
+      db.get("SELECT wallet_balance FROM users WHERE id=?", [req.session.user.id], (walletErr, me) => {
+        if (walletErr || !me) return finish(walletErr || new Error('WALLET_NOT_FOUND'));
+        if ((me.wallet_balance || 0) < totalCharge) return finish(new Error('INSUFFICIENT_BALANCE'));
+
+        db.run(
+          "UPDATE users SET wallet_balance = wallet_balance - ? WHERE id=? AND wallet_balance >= ?",
+          [totalCharge, req.session.user.id, totalCharge],
+          function (debitErr) {
+            if (debitErr || this.changes === 0) return finish(debitErr || new Error('WALLET_DEBIT_FAILED'));
+
+            db.run(
+              "INSERT INTO bookings (user_id, type, item_id, item_name, check_in, persons, total_price, payment_method, payment_status, payment_fee, escrow_status, paid_at) VALUES (?,?,?,?,?,?,?,?,?,'held',?,'held',CURRENT_TIMESTAMP)",
+              [req.session.user.id, 'guide', guide_id, guide_name, start_date, days, amount, 'wallet', userFee],
+              function (insertErr) {
+                if (insertErr) return finish(insertErr);
+                const bookingId = this.lastID;
+                const commissionRate = commissionRateFor('guide');
+                const commissionAmount = Math.round(amount * commissionRate);
+                db.run(
+                  "INSERT INTO escrow_payments (booking_id, payer_id, provider_user_id, amount, user_fee_amount, provider_commission_rate, provider_commission_amount, status) VALUES (?,?,?,?,?,?,?,'held')",
+                  [bookingId, req.session.user.id, ownerId, amount, userFee, commissionRate, commissionAmount],
+                  function (escrowErr) {
+                    if (escrowErr) return finish(escrowErr);
+                    recordWalletTx(req.session.user.id, -totalCharge, 'booking_debit', 'booking', bookingId, 'Guide booking');
+                    if (userFee > 0) {
+                      return getAdminUserId((adminId) => {
+                        if (!adminId) return finish(null);
+                        db.run("UPDATE users SET wallet_balance = wallet_balance + ? WHERE id=?", [userFee, adminId], () => {
+                          recordWalletTx(adminId, userFee, 'user_fee', 'booking', bookingId, 'User booking fee');
+                          return finish(null);
+                        });
+                      });
+                    }
+                    return finish(null);
+                  }
+                );
+              }
+            );
+          }
+        );
+      });
+    });
+  }, (txErr) => {
+    if (txErr) {
+      if (txErr.message === 'INSUFFICIENT_BALANCE') {
+        req.flash('error', 'Not enough wallet balance. Please top up your wallet.');
+      } else {
+        req.flash('error', 'Could not complete guide booking. Please try again.');
+      }
+      return res.redirect('/guides');
+    }
+    req.flash('success', 'Guide hired successfully! Payment is held in escrow.');
+    return res.redirect(returnTo || '/dashboard');
   });
 });
 
 // Book Package
 router.post('/book/package', isAuth, (req, res) => {
   const {
-    pkg_id, pkg_name, travel_date, persons, total_price,
-    payment_method, payment_number, payment_txn_id
+    pkg_id, pkg_name, travel_date, persons, total_price
   } = req.body;
-  const method = normalizePaymentMethod(payment_method);
-  const payerNumber = normalizePaymentNumber(payment_number);
-  const txnId = normalizePaymentTxnId(payment_txn_id);
-  if (!method) {
-    req.flash('error', 'Please choose a valid payment method (bKash or Nagad).');
+  const amount = Number(total_price || 0);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    req.flash('error', 'Invalid booking amount.');
     return res.redirect('/packages');
   }
-  if (!payerNumber || !txnId) {
-    req.flash('error', 'Please provide a valid payment number and transaction ID.');
-    return res.redirect('/packages');
-  }
-  const gatewayRef = buildGatewayRef(method);
-  db.run("INSERT INTO bookings (user_id, type, item_id, item_name, check_in, persons, total_price, payment_method, payment_status, payment_number, payment_txn_id, payment_gateway_ref, paid_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)",
-    [req.session.user.id, 'package', pkg_id, pkg_name, travel_date, persons, total_price, method, 'paid', payerNumber, txnId, gatewayRef], (err) => {
-    req.flash('success', 'Package booked!');
-    res.redirect('/dashboard');
+  const userFee = calcUserFee(amount);
+  const totalCharge = amount + userFee;
+
+  withTransaction((finish) => {
+    getProviderUserId('package', pkg_id, (ownerErr, ownerId) => {
+      if (ownerErr) return finish(ownerErr);
+      db.get("SELECT wallet_balance FROM users WHERE id=?", [req.session.user.id], (walletErr, me) => {
+        if (walletErr || !me) return finish(walletErr || new Error('WALLET_NOT_FOUND'));
+        if ((me.wallet_balance || 0) < totalCharge) return finish(new Error('INSUFFICIENT_BALANCE'));
+
+        db.run(
+          "UPDATE users SET wallet_balance = wallet_balance - ? WHERE id=? AND wallet_balance >= ?",
+          [totalCharge, req.session.user.id, totalCharge],
+          function (debitErr) {
+            if (debitErr || this.changes === 0) return finish(debitErr || new Error('WALLET_DEBIT_FAILED'));
+
+            db.run(
+              "INSERT INTO bookings (user_id, type, item_id, item_name, check_in, persons, total_price, payment_method, payment_status, payment_fee, escrow_status, paid_at) VALUES (?,?,?,?,?,?,?,?,?,'held',?,'held',CURRENT_TIMESTAMP)",
+              [req.session.user.id, 'package', pkg_id, pkg_name, travel_date, persons, amount, 'wallet', userFee],
+              function (insertErr) {
+                if (insertErr) return finish(insertErr);
+                const bookingId = this.lastID;
+                const commissionRate = commissionRateFor('package');
+                const commissionAmount = Math.round(amount * commissionRate);
+                db.run(
+                  "INSERT INTO escrow_payments (booking_id, payer_id, provider_user_id, amount, user_fee_amount, provider_commission_rate, provider_commission_amount, status) VALUES (?,?,?,?,?,?,?,'held')",
+                  [bookingId, req.session.user.id, ownerId, amount, userFee, commissionRate, commissionAmount],
+                  function (escrowErr) {
+                    if (escrowErr) return finish(escrowErr);
+                    recordWalletTx(req.session.user.id, -totalCharge, 'booking_debit', 'booking', bookingId, 'Package booking');
+                    if (userFee > 0) {
+                      return getAdminUserId((adminId) => {
+                        if (!adminId) return finish(null);
+                        db.run("UPDATE users SET wallet_balance = wallet_balance + ? WHERE id=?", [userFee, adminId], () => {
+                          recordWalletTx(adminId, userFee, 'user_fee', 'booking', bookingId, 'User booking fee');
+                          return finish(null);
+                        });
+                      });
+                    }
+                    return finish(null);
+                  }
+                );
+              }
+            );
+          }
+        );
+      });
+    });
+  }, (txErr) => {
+    if (txErr) {
+      if (txErr.message === 'INSUFFICIENT_BALANCE') {
+        req.flash('error', 'Not enough wallet balance. Please top up your wallet.');
+      } else {
+        req.flash('error', 'Could not complete package booking. Please try again.');
+      }
+      return res.redirect('/packages');
+    }
+    req.flash('success', 'Package booked! Payment is held in escrow.');
+    return res.redirect('/dashboard');
   });
 });
 
@@ -954,20 +1477,56 @@ router.post('/spots/:id/favorite', isAuth, (req, res) => {
 
 // Cancel Booking
 router.post('/bookings/:id/cancel', isAuth, (req, res) => {
-  db.get("SELECT id, status, exchange_locked FROM bookings WHERE id=? AND user_id=?", [req.params.id, req.session.user.id], (err, booking) => {
-    if (err || !booking) {
-      req.flash('error', 'Booking not found.');
-      return res.redirect('/dashboard');
+  db.get(
+    `SELECT b.id, b.status, b.exchange_locked, b.payment_fee, b.total_price,
+            e.id as escrow_id, e.status as escrow_status, e.amount as escrow_amount
+     FROM bookings b
+     LEFT JOIN escrow_payments e ON e.booking_id = b.id
+     WHERE b.id=? AND b.user_id=?`,
+    [req.params.id, req.session.user.id],
+    (err, booking) => {
+      if (err || !booking) {
+        req.flash('error', 'Booking not found.');
+        return res.redirect('/dashboard');
+      }
+      if (booking.exchange_locked) {
+        req.flash('error', 'This exchanged ticket cannot be cancelled by user.');
+        return res.redirect('/dashboard');
+      }
+
+      const refundAmount = Number(booking.escrow_amount || booking.total_price || 0);
+      const refundFee = Number(booking.payment_fee || 0);
+      const totalRefund = refundAmount + refundFee;
+
+      withTransaction((finish) => {
+        db.run("UPDATE bookings SET status='cancelled', escrow_status='refunded' WHERE id=? AND user_id=?", [booking.id, req.session.user.id], (updErr) => {
+          if (updErr) return finish(updErr);
+          if (booking.escrow_id && booking.escrow_status === 'held') {
+            db.run("UPDATE escrow_payments SET status='refunded', released_at=CURRENT_TIMESTAMP WHERE id=?", [booking.escrow_id], (escrowErr) => {
+              if (escrowErr) return finish(escrowErr);
+              if (totalRefund > 0) {
+                db.run("UPDATE users SET wallet_balance = wallet_balance + ? WHERE id=?", [totalRefund, req.session.user.id], () => {
+                  recordWalletTx(req.session.user.id, totalRefund, 'refund', 'booking', booking.id, 'Booking refund');
+                  return finish(null);
+                });
+              } else {
+                return finish(null);
+              }
+            });
+          } else {
+            return finish(null);
+          }
+        });
+      }, (txErr) => {
+        if (txErr) {
+          req.flash('error', 'Could not cancel booking. Please try again.');
+          return res.redirect('/dashboard');
+        }
+        req.flash('success', 'Booking cancelled successfully.');
+        return res.redirect('/dashboard');
+      });
     }
-    if (booking.exchange_locked) {
-      req.flash('error', 'This exchanged ticket cannot be cancelled by user.');
-      return res.redirect('/dashboard');
-    }
-    db.run("UPDATE bookings SET status='cancelled' WHERE id=? AND user_id=?", [req.params.id, req.session.user.id], () => {
-      req.flash('success', 'Booking cancelled successfully.');
-      return res.redirect('/dashboard');
-    });
-  });
+  );
 });
 
 router.use((err, req, res, next) => {

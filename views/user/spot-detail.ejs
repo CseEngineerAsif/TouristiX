@@ -51,13 +51,13 @@
           <div class="quick-links">
             <h3>Plan Your Visit</h3>
             <div class="quick-links-grid">
-              <a href="/hotels?district=<%= spot.district %>" class="quick-link-card">
+              <a href="/hotels?district=<%= spot.district %>&return=<%= encodeURIComponent('/spots/' + spot.id) %>" class="quick-link-card">
                 <i class="fas fa-hotel"></i><span>Hotels in <%= spot.district %></span>
               </a>
               <a href="/guides" class="quick-link-card">
                 <i class="fas fa-user-tie"></i><span>Hire a Guide</span>
               </a>
-              <a href="/transport?to=<%= spot.district %>" class="quick-link-card">
+              <a href="/transport?to=<%= spot.district %>&return=<%= encodeURIComponent('/spots/' + spot.id) %>" class="quick-link-card">
                 <i class="fas fa-bus"></i><span>Transport Options</span>
               </a>
             </div>
@@ -115,7 +115,7 @@
         <div class="sidebar-block">
           <div class="sidebar-head">
             <h3><i class="fas fa-hotel"></i> Nearby Hotels</h3>
-            <a href="/hotels?district=<%= encodeURIComponent(spot.district) %>">View all</a>
+            <a href="/hotels?district=<%= encodeURIComponent(spot.district) %>&return=<%= encodeURIComponent('/spots/' + spot.id) %>">View all</a>
           </div>
           <% if (relatedHotels.length === 0) { %>
           <p class="sidebar-empty">No hotels found for this area.</p>
@@ -129,7 +129,7 @@
             <p><i class="fas fa-map-marker-alt"></i> <%= h.location %></p>
             <div class="sidebar-item-actions">
               <span class="rating"><i class="fas fa-star"></i> <%= h.rating %></span>
-              <a href="/hotels?district=<%= encodeURIComponent(spot.district) %>" class="btn-sm">Book</a>
+              <a href="/hotels/<%= h.id %>?return=<%= encodeURIComponent('/spots/' + spot.id) %>" class="btn-sm">Book</a>
             </div>
           </div>
           <% }) %>
@@ -138,7 +138,7 @@
         <div class="sidebar-block">
           <div class="sidebar-head">
             <h3><i class="fas fa-bus"></i> Relevant Transport</h3>
-            <a href="/transport?to=<%= encodeURIComponent(spot.district) %>">View all</a>
+            <a href="/transport?to=<%= encodeURIComponent(spot.district) %>&return=<%= encodeURIComponent('/spots/' + spot.id) %>">View all</a>
           </div>
           <% if (relatedTransports.length === 0) { %>
           <p class="sidebar-empty">No transport found for this route.</p>
@@ -152,7 +152,7 @@
             <p><i class="fas fa-route"></i> <%= t.from_location %> &rarr; <%= t.to_location %></p>
             <div class="sidebar-item-actions">
               <span><i class="fas fa-chair"></i> <%= t.seats_available %> seats</span>
-              <a href="/transport?to=<%= encodeURIComponent(spot.district) %>" class="btn-sm">Book</a>
+              <a href="/transport?to=<%= encodeURIComponent(spot.district) %>&return=<%= encodeURIComponent('/spots/' + spot.id) %>" class="btn-sm">Book</a>
             </div>
           </div>
           <% }) %>
@@ -175,7 +175,7 @@
             <p><i class="fas fa-certificate"></i> <%= g.specialty %></p>
             <div class="sidebar-item-actions">
               <span class="rating"><i class="fas fa-star"></i> <%= g.rating %></span>
-              <a href="/guides" class="btn-sm">Hire</a>
+              <a href="/guides/<%= g.id %>?return=<%= encodeURIComponent('/spots/' + spot.id) %>" class="btn-sm">Hire</a>
             </div>
           </div>
           <% }) %>

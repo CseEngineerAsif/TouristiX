@@ -25,6 +25,9 @@ db.serialize(() => {
   db.all(`PRAGMA table_info(users)`, (err, cols) => {
     if (err || !Array.isArray(cols)) return;
     const colNames = cols.map(c => c.name);
+    if (!colNames.includes('gender')) {
+      db.run("ALTER TABLE users ADD COLUMN gender TEXT");
+    }
     if (!colNames.includes('wallet_balance')) {
       db.run("ALTER TABLE users ADD COLUMN wallet_balance INTEGER DEFAULT 20000");
     }
@@ -66,6 +69,7 @@ db.serialize(() => {
     description TEXT,
     total_rooms INTEGER DEFAULT 10,
     available_rooms INTEGER DEFAULT 10,
+    owner_user_id INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
@@ -81,6 +85,7 @@ db.serialize(() => {
     bio TEXT,
     phone TEXT,
     available INTEGER DEFAULT 1,
+    owner_user_id INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
@@ -94,8 +99,33 @@ db.serialize(() => {
     price INTEGER NOT NULL,
     seats_available INTEGER DEFAULT 40,
     image TEXT DEFAULT '',
+    owner_user_id INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
+
+  db.all(`PRAGMA table_info(hotels)`, (err, cols) => {
+    if (err || !Array.isArray(cols)) return;
+    const colNames = cols.map(c => c.name);
+    if (!colNames.includes('owner_user_id')) {
+      db.run("ALTER TABLE hotels ADD COLUMN owner_user_id INTEGER");
+    }
+  });
+
+  db.all(`PRAGMA table_info(guides)`, (err, cols) => {
+    if (err || !Array.isArray(cols)) return;
+    const colNames = cols.map(c => c.name);
+    if (!colNames.includes('owner_user_id')) {
+      db.run("ALTER TABLE guides ADD COLUMN owner_user_id INTEGER");
+    }
+  });
+
+  db.all(`PRAGMA table_info(transport)`, (err, cols) => {
+    if (err || !Array.isArray(cols)) return;
+    const colNames = cols.map(c => c.name);
+    if (!colNames.includes('owner_user_id')) {
+      db.run("ALTER TABLE transport ADD COLUMN owner_user_id INTEGER");
+    }
+  });
 
   db.run(`CREATE TABLE IF NOT EXISTS packages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -107,6 +137,7 @@ db.serialize(() => {
     image TEXT DEFAULT '',
     description TEXT,
     max_persons INTEGER DEFAULT 20,
+    owner_user_id INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
@@ -129,6 +160,9 @@ db.serialize(() => {
   db.all(`PRAGMA table_info(bookings)`, (err, cols) => {
     if (err || !Array.isArray(cols)) return;
     const colNames = cols.map(c => c.name);
+    if (!colNames.includes('seat_numbers')) {
+      db.run("ALTER TABLE bookings ADD COLUMN seat_numbers TEXT");
+    }
     if (!colNames.includes('exchange_locked')) {
       db.run("ALTER TABLE bookings ADD COLUMN exchange_locked INTEGER DEFAULT 0");
     }
@@ -149,6 +183,12 @@ db.serialize(() => {
     }
     if (!colNames.includes('paid_at')) {
       db.run("ALTER TABLE bookings ADD COLUMN paid_at DATETIME");
+    }
+    if (!colNames.includes('payment_fee')) {
+      db.run("ALTER TABLE bookings ADD COLUMN payment_fee INTEGER DEFAULT 0");
+    }
+    if (!colNames.includes('escrow_status')) {
+      db.run("ALTER TABLE bookings ADD COLUMN escrow_status TEXT DEFAULT 'none'");
     }
   });
 
@@ -194,6 +234,50 @@ db.serialize(() => {
     ensureIndex();
   });
 
+  db.run(`CREATE TABLE IF NOT EXISTS wallet_transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    amount INTEGER NOT NULL,
+    type TEXT NOT NULL,
+    ref_type TEXT,
+    ref_id INTEGER,
+    note TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+  )`);
+  db.run("CREATE INDEX IF NOT EXISTS idx_wallet_transactions_user ON wallet_transactions(user_id, created_at)");
+
+  db.run(`CREATE TABLE IF NOT EXISTS wallet_topups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    gateway TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    status TEXT DEFAULT 'pending',
+    gateway_ref TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    paid_at DATETIME,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+  )`);
+  db.run("CREATE INDEX IF NOT EXISTS idx_wallet_topups_user ON wallet_topups(user_id, status, created_at)");
+
+  db.run(`CREATE TABLE IF NOT EXISTS escrow_payments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    booking_id INTEGER NOT NULL,
+    payer_id INTEGER NOT NULL,
+    provider_user_id INTEGER,
+    amount INTEGER NOT NULL,
+    user_fee_amount INTEGER DEFAULT 0,
+    provider_commission_rate REAL DEFAULT 0,
+    provider_commission_amount INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'held',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    released_at DATETIME,
+    FOREIGN KEY(booking_id) REFERENCES bookings(id),
+    FOREIGN KEY(payer_id) REFERENCES users(id),
+    FOREIGN KEY(provider_user_id) REFERENCES users(id)
+  )`);
+  db.run("CREATE INDEX IF NOT EXISTS idx_escrow_status ON escrow_payments(status, created_at)");
+
   db.run(`CREATE TABLE IF NOT EXISTS reviews (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -234,6 +318,41 @@ db.serialize(() => {
     FOREIGN KEY(guide_id) REFERENCES guides(id)
   )`);
   db.run("CREATE INDEX IF NOT EXISTS idx_guide_messages_thread ON guide_messages(user_id, guide_id, created_at)");
+
+  db.run(`CREATE TABLE IF NOT EXISTS hotel_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    hotel_id INTEGER NOT NULL,
+    sender_role TEXT NOT NULL,
+    message TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id),
+    FOREIGN KEY(hotel_id) REFERENCES hotels(id)
+  )`);
+  db.run("CREATE INDEX IF NOT EXISTS idx_hotel_messages_thread ON hotel_messages(user_id, hotel_id, created_at)");
+
+  db.run(`CREATE TABLE IF NOT EXISTS transport_seats (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    transport_id INTEGER NOT NULL,
+    seat_no TEXT NOT NULL,
+    is_booked INTEGER DEFAULT 0,
+    booking_id INTEGER,
+    booked_at DATETIME,
+    FOREIGN KEY(transport_id) REFERENCES transport(id),
+    FOREIGN KEY(booking_id) REFERENCES bookings(id)
+  )`);
+  db.run("CREATE INDEX IF NOT EXISTS idx_transport_seats_transport ON transport_seats(transport_id, is_booked)");
+
+  db.run(`CREATE TABLE IF NOT EXISTS blog_posts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    media_urls TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+  )`);
+  db.run("CREATE INDEX IF NOT EXISTS idx_blog_posts_user ON blog_posts(user_id, created_at)");
 
   // Seed data
   db.get("SELECT COUNT(*) as cnt FROM tourist_spots", (err, row) => {
@@ -322,6 +441,14 @@ db.serialize(() => {
     }
   });
 
+  db.all(`PRAGMA table_info(packages)`, (err, cols) => {
+    if (err || !Array.isArray(cols)) return;
+    const colNames = cols.map(c => c.name);
+    if (!colNames.includes('owner_user_id')) {
+      db.run("ALTER TABLE packages ADD COLUMN owner_user_id INTEGER");
+    }
+  });
+
   db.get("SELECT COUNT(*) as cnt FROM users WHERE role='admin'", (err, row) => {
     if (row && row.cnt === 0) {
       const bcrypt = require('bcryptjs');
@@ -330,6 +457,47 @@ db.serialize(() => {
       console.log('✅ Admin created: admin@touristix.com / admin123');
     }
   });
+
+  db.get("SELECT COUNT(*) as cnt FROM users WHERE email='partner@gmail.com'", (err, row) => {
+    if (row && row.cnt === 0) {
+      const bcrypt = require('bcryptjs');
+      const hash = bcrypt.hashSync('partner', 10);
+      db.run("INSERT INTO users (name, email, password, role) VALUES ('Default Partner', 'partner@gmail.com', ?, 'owner_hotel')", [hash]);
+      console.log('✅ Partner created: partner@gmail.com / partner');
+    }
+  });
+
+  const ensurePartnerForItems = (tableName, role, getLabel) => {
+    db.all(`SELECT id, owner_user_id, name, company, type FROM ${tableName}`, (err, rows) => {
+      if (err || !rows || rows.length === 0) return;
+      rows.forEach((row) => {
+        if (row.owner_user_id) return;
+        const email = `${tableName}-${row.id}@partner.local`;
+        db.get("SELECT id FROM users WHERE email=?", [email], (uErr, existing) => {
+          if (uErr) return;
+          const finalizeAssign = (userId) => {
+            db.run(`UPDATE ${tableName} SET owner_user_id=? WHERE id=?`, [userId, row.id]);
+          };
+          if (existing && existing.id) return finalizeAssign(existing.id);
+          const bcrypt = require('bcryptjs');
+          const hash = bcrypt.hashSync('partner', 10);
+          const label = getLabel(row);
+          db.run(
+            "INSERT INTO users (name, email, password, role) VALUES (?,?,?,?)",
+            [label, email, hash, role],
+            function () {
+              finalizeAssign(this.lastID);
+            }
+          );
+        });
+      });
+    });
+  };
+
+  ensurePartnerForItems('hotels', 'owner_hotel', (row) => `${row.name || 'Hotel'} Partner`);
+  ensurePartnerForItems('transport', 'owner_transport', (row) => `${row.company || row.type || 'Transport'} Partner`);
+  ensurePartnerForItems('guides', 'owner_guide', (row) => `${row.name || 'Guide'} Partner`);
+  ensurePartnerForItems('packages', 'owner_package', (row) => `${row.name || 'Package'} Partner`);
 });
 
 module.exports = db;

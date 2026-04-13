@@ -23,9 +23,19 @@
       <li><a href="/transport" class="<%= title==='Transport'?'active':'' %>">Transport</a></li>
       <li><a href="/guides" class="<%= title==='Guides'?'active':'' %>">Guides</a></li>
       <li><a href="/packages" class="<%= title==='Travel Packages'?'active':'' %>">Packages</a></li>
+      <li><a href="/blog" class="<%= title==='Blog'?'active':'' %>">Blog</a></li>
       <% if (locals.user) { %>
-        <li><a href="/dashboard" class="btn-nav">My Dashboard</a></li>
-        <li><a href="/auth/logout">Logout</a></li>
+        <% const isProvider = ['owner_hotel','owner_transport','owner_guide','owner_package'].includes(user.role); %>
+        <% if (user.role === 'admin') { %>
+          <li><a href="/admin/dashboard" class="btn-nav">Admin Dashboard</a></li>
+          <li><a href="/auth/logout">Logout</a></li>
+        <% } else if (isProvider) { %>
+          <li><a href="/partner/dashboard" class="btn-nav">Partner Dashboard</a></li>
+          <li><a href="/partner/logout">Logout</a></li>
+        <% } else { %>
+          <li><a href="/dashboard" class="btn-nav">My Dashboard</a></li>
+          <li><a href="/auth/logout">Logout</a></li>
+        <% } %>
       <% } else { %>
         <li><a href="/auth/login" class="btn-nav">Login</a></li>
       <% } %>

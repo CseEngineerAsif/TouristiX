@@ -9,10 +9,14 @@
 
 <section class="section">
   <div class="container">
+    <% const listReturn = '/hotels' + (locals.district ? ('?district=' + encodeURIComponent(locals.district)) : '') + (returnTo ? (locals.district ? '&return=' : '?return=') + encodeURIComponent(returnTo) : ''); %>
     <form action="/hotels" method="GET" class="filter-form">
       <input type="text" name="district" placeholder="Search by district or location..." value="<%= locals.district || '' %>"/>
+      <% if (locals.returnTo) { %>
+      <input type="hidden" name="return" value="<%= returnTo %>"/>
+      <% } %>
       <button type="submit" class="btn-primary"><i class="fas fa-search"></i> Search</button>
-      <a href="/hotels" class="btn-outline">Clear</a>
+      <a href="/hotels<%= returnTo ? ('?return=' + encodeURIComponent(returnTo)) : '' %>" class="btn-outline">Clear</a>
     </form>
 
     <div class="cards-grid">
@@ -32,10 +36,12 @@
           <div class="card-footer">
             <div class="rating"><i class="fas fa-star"></i> <%= h.rating %></div>
             <div class="card-actions-row">
-              <a href="/hotels/<%= h.id %>" class="btn-sm-outline">View Details</a>
+              <a href="/hotels/<%= h.id %><%= returnTo ? ('?return=' + encodeURIComponent(returnTo)) : '' %>" class="btn-sm-outline">View Details</a>
               <% if (locals.user) { %>
+              <a href="/hotels/<%= h.id %>/chat?return=<%= encodeURIComponent(listReturn) %>" class="btn-sm-outline">Chat</a>
               <button class="btn-sm" onclick="openBooking('hotel','<%= h.id %>','<%= h.name.replace(/'/g,'') %>',<%= h.price_per_night %>)">Book Now</button>
               <% } else { %>
+              <a href="/auth/login" class="btn-sm-outline">Login to Chat</a>
               <a href="/auth/login" class="btn-sm">Login to Book</a>
               <% } %>
             </div>
@@ -58,6 +64,7 @@
       <input type="hidden" name="hotel_id" id="m_hotel_id"/>
       <input type="hidden" name="hotel_name" id="m_hotel_name"/>
       <input type="hidden" name="total_price" id="m_total_price"/>
+      <input type="hidden" name="return_to" value="<%= returnTo || '' %>"/>
       <div class="form-group">
         <label>Hotel</label>
         <input type="text" id="m_hotel_display" readonly class="form-control"/>
@@ -111,5 +118,4 @@ document.getElementById('m_checkin').min = today;
 document.getElementById('m_checkout').min = today;
 </script>
 
-<%- include('../partials/payment-modal') %>
 <%- include('../partials/footer') %>

@@ -21,7 +21,12 @@
       <h2>Create Account</h2>
       <p>Join TouristiX for free</p>
       <% if (error && error.length > 0) { %><div class="alert alert-danger"><%= error %></div><% } %>
-      <form action="/auth/register" method="POST" enctype="multipart/form-data" class="auth-form">
+      <div class="auth-tabs">
+        <button type="button" class="auth-tab active" data-target="user-register">User Register</button>
+        <button type="button" class="auth-tab" data-target="partner-register">Partner Register</button>
+      </div>
+
+      <form action="/auth/register" method="POST" enctype="multipart/form-data" class="auth-form auth-tab-panel active" id="user-register">
         <div class="form-group">
           <label><i class="fas fa-user"></i> Full Name</label>
           <input type="text" name="name" placeholder="Your full name" required class="form-control"/>
@@ -48,6 +53,15 @@
           </select>
         </div>
         <div class="form-group">
+          <label><i class="fas fa-venus-mars"></i> Gender</label>
+          <select name="gender" required class="form-control">
+            <option value="">Select gender</option>
+            <option value="female">Female</option>
+            <option value="male">Male</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="form-group">
           <label><i class="fas fa-upload"></i> Upload Document</label>
           <input type="file" name="id_document" accept=".jpg,.jpeg,.png,.pdf" required class="form-control"/>
           <small>Upload NID/Birth Registration/Passport (JPG, PNG, PDF).</small>
@@ -58,9 +72,58 @@
         </div>
         <button type="submit" class="btn-primary btn-block">Create Account</button>
       </form>
+
+      <form action="/partner/register" method="POST" class="auth-form auth-tab-panel" id="partner-register">
+        <div class="form-group">
+          <label><i class="fas fa-briefcase"></i> Partner Type</label>
+          <select name="provider_type" required class="form-control">
+            <option value="">Select partner type</option>
+            <option value="hotel">Hotel Partner</option>
+            <option value="transport">Transport Partner</option>
+            <option value="guide">Tour Guide Partner</option>
+            <option value="package">Package Company Partner</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label><i class="fas fa-user"></i> Full Name</label>
+          <input type="text" name="name" placeholder="Your full name" required class="form-control"/>
+        </div>
+        <div class="form-group">
+          <label><i class="fas fa-envelope"></i> Gmail</label>
+          <input type="email" name="email" placeholder="partner@email.com" required class="form-control"/>
+        </div>
+        <div class="form-group">
+          <label><i class="fas fa-phone"></i> Phone</label>
+          <input type="text" name="phone" placeholder="+880 XXXX-XXXXXX" class="form-control"/>
+        </div>
+        <div class="form-group">
+          <label><i class="fas fa-lock"></i> Password</label>
+          <input type="password" name="password" placeholder="Min 6 characters" required minlength="6" class="form-control"/>
+        </div>
+        <button type="submit" class="btn-primary btn-block">Create Partner Account</button>
+      </form>
       <p class="auth-switch">Already have an account? <a href="/auth/login">Login</a></p>
     </div>
   </div>
 </div>
+<script>
+(() => {
+  const tabs = document.querySelectorAll('.auth-tab');
+  const panels = document.querySelectorAll('.auth-tab-panel');
+  const activate = (targetId) => {
+    tabs.forEach(t => t.classList.remove('active'));
+    panels.forEach(p => p.classList.remove('active'));
+    const tab = Array.from(tabs).find(t => t.dataset.target === targetId) || tabs[0];
+    const panel = document.getElementById(targetId) || panels[0];
+    if (tab) tab.classList.add('active');
+    if (panel) panel.classList.add('active');
+  };
+  tabs.forEach((tab) => {
+    tab.addEventListener('click', () => activate(tab.dataset.target));
+  });
+  const tabParam = new URLSearchParams(window.location.search).get('tab');
+  if (tabParam === 'partner') activate('partner-register');
+})();
+</script>
 </body>
 </html>

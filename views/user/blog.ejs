@@ -1,0 +1,160 @@
+<%- include('../partials/header') %>
+
+<section class="page-header">
+  <div class="container">
+    <h1><i class="fas fa-pen-nib"></i> Travel Blog</h1>
+    <p>Share your journey, tips, and memories with the community.</p>
+  </div>
+</section>
+
+<style>
+.blog-page {
+  display: grid;
+  gap: 20px;
+}
+.blog-form-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.05);
+}
+.blog-form-card h3 {
+  margin-top: 0;
+}
+.blog-feed {
+  display: grid;
+  gap: 18px;
+}
+.blog-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.05);
+}
+.blog-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+}
+.blog-author {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.blog-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--primary-light);
+}
+.blog-title {
+  padding: 0 16px;
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+.blog-content {
+  padding: 8px 16px 16px;
+  color: #334155;
+  line-height: 1.6;
+}
+.blog-media {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  padding: 0 16px 16px;
+}
+.blog-media img,
+.blog-media video {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+.blog-meta {
+  color: #64748b;
+  font-size: 0.8rem;
+}
+.login-prompt {
+  background: #f8fafc;
+  border: 1px dashed #cbd5f5;
+  padding: 16px;
+  border-radius: 14px;
+}
+</style>
+
+<section class="section">
+  <div class="container blog-page">
+    <% if (locals.success_msg && success_msg.length) { %>
+      <div class="alert alert-success"><%= success_msg[0] %></div>
+    <% } %>
+    <% if (locals.error_msg && error_msg.length) { %>
+      <div class="alert alert-danger"><%= error_msg[0] %></div>
+    <% } %>
+
+    <% if (locals.user) { %>
+      <div class="blog-form-card">
+        <h3>Write Your Travel Story</h3>
+        <form action="/blog" method="POST" enctype="multipart/form-data" class="review-form">
+          <input type="text" name="title" placeholder="Title of your journey" class="form-control" required />
+          <textarea name="content" placeholder="Share your travel experience..." rows="6" required></textarea>
+          <input type="file" name="media" accept=".jpg,.jpeg,.png,.webp,.mp4,.webm,.mov" multiple class="review-photo-input"/>
+          <button type="submit" class="btn-primary">Publish Blog</button>
+        </form>
+        <small class="muted-text">You can upload photos or short videos (max 10 files).</small>
+      </div>
+    <% } else { %>
+      <div class="login-prompt">
+        <p><strong>Want to share your travel story?</strong></p>
+        <p>Please <a href="/auth/login">login</a> to publish a blog post.</p>
+      </div>
+    <% } %>
+
+    <div class="blog-feed">
+      <% if (!posts.length) { %>
+        <div class="empty-state">
+          <i class="fas fa-pen"></i>
+          <h3>No blog posts yet</h3>
+          <p>Be the first to share a travel story.</p>
+        </div>
+      <% } else { %>
+        <% posts.forEach(p => { %>
+          <div class="blog-card">
+            <div class="blog-card-header">
+              <div class="blog-author">
+                <% if (p.author_avatar) { %>
+                  <img src="<%= p.author_avatar %>" alt="<%= p.author_name %>" class="blog-avatar" onerror="this.src='/images/placeholder.jpg'"/>
+                <% } else { %>
+                  <div class="review-avatar"><%= (p.author_name || 'U').charAt(0).toUpperCase() %></div>
+                <% } %>
+                <div>
+                  <strong><%= p.author_name %></strong>
+                  <div class="blog-meta"><%= new Date(p.created_at).toLocaleString() %></div>
+                </div>
+              </div>
+            </div>
+            <div class="blog-title"><%= p.title %></div>
+            <div class="blog-content"><%= p.content %></div>
+            <% const media = (p.media_urls || '').split(',').map(m => m.trim()).filter(Boolean); %>
+            <% if (media.length) { %>
+            <div class="blog-media">
+              <% media.forEach(m => { %>
+                <% if (m.match(/\.(mp4|webm|mov)$/i)) { %>
+                  <video src="<%= m %>" controls></video>
+                <% } else { %>
+                  <img src="<%= m %>" alt="Blog media" onerror="this.style.display='none'"/>
+                <% } %>
+              <% }) %>
+            </div>
+            <% } %>
+          </div>
+        <% }) %>
+      <% } %>
+    </div>
+  </div>
+</section>
+
+<%- include('../partials/footer') %>
