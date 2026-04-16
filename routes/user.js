@@ -216,6 +216,77 @@ function buildTicketNumber(booking) {
   return `BT-${typeCode}-${idText}`;
 }
 
+function ensureTransportSeats(transportId, totalSeats, cb) {
+  db.all(
+    "SELECT * FROM transport_seats WHERE transport_id=? ORDER BY id ASC",
+    [transportId],
+    (seatErr, seats) => {
+      if (seatErr) return cb(seatErr);
+      if ((seats || []).length || !(totalSeats > 0)) return cb(null, seats || []);
+
+      const stmt = db.prepare("INSERT INTO transport_seats (transport_id, seat_no, is_booked) VALUES (?,?,0)");
+      for (let i = 1; i <= totalSeats; i += 1) {
+        stmt.run([transportId, String(i)]);
+      }
+      stmt.finalize((insertErr) => {
+        if (insertErr) return cb(insertErr);
+        db.all(
+          "SELECT * FROM transport_seats WHERE transport_id=? ORDER BY id ASC",
+          [transportId],
+          (seatErr2, seats2) => cb(seatErr2, seats2 || [])
+        );
+      });
+    }
+  );
+}
+
+function getBookedSeatNumbers(transportId, travelDate, cb) {
+  if (!transportId || !travelDate) return cb(null, new Set());
+
+  db.all(
+    `SELECT seat_numbers
+     FROM bookings
+     WHERE type='transport'
+       AND item_id=?
+       AND check_in=?
+       AND status!='cancelled'
+       AND seat_numbers IS NOT NULL
+       AND TRIM(seat_numbers)!=''`,
+    [transportId, travelDate],
+    (err, rows) => {
+      if (err) return cb(err);
+      const bookedSeats = new Set();
+      (rows || []).forEach((row) => {
+        String(row?.seat_numbers || '')
+          .split(',')
+          .map((seat) => seat.trim())
+          .filter(Boolean)
+          .forEach((seat) => bookedSeats.add(seat));
+      });
+      return cb(null, bookedSeats);
+    }
+  );
+}
+
+function getTransportSeatAvailability(transportId, totalSeats, travelDate, cb) {
+  ensureTransportSeats(transportId, totalSeats, (seatErr, seats) => {
+    if (seatErr) return cb(seatErr);
+    getBookedSeatNumbers(transportId, travelDate, (bookedErr, bookedSeats) => {
+      if (bookedErr) return cb(bookedErr);
+      const seatCount = (seats || []).length || Number(totalSeats || 0);
+      const mappedSeats = (seats || []).map((seat) => ({
+        ...seat,
+        is_booked: bookedSeats.has(String(seat.seat_no)) ? 1 : 0
+      }));
+      return cb(null, {
+        seats: mappedSeats,
+        bookedSeats: Array.from(bookedSeats),
+        availableSeats: Math.max(0, seatCount - bookedSeats.size)
+      });
+    });
+  });
+}
+
 function getMerchantDisplayName(type, itemName) {
   const normalizedType = String(type || '').trim().toLowerCase();
   const rawName = String(itemName || '').trim();
@@ -1226,44 +1297,41 @@ router.get('/transport/:id', (req, res) => {
 
   db.get("SELECT * FROM transport WHERE id = ?", [transportId], (err, transport) => {
     if (err || !transport) return res.redirect('/transport');
+    const totalSeats = Number(transport.seats_available || 0);
+    ensureTransportSeats(transportId, totalSeats, (seatErr, seats) => {
+      if (seatErr) return res.redirect('/transport');
+      res.render('user/transport-detail', {
+        title: `${transport.company || transport.type} - Details`,
+        transport,
+        seats: seats || [],
+        returnTo,
+        user: req.session.user
+      });
+    });
+  });
+});
 
-    db.all(
-      "SELECT * FROM transport_seats WHERE transport_id=? ORDER BY id ASC",
-      [transportId],
-      (seatErr, seats) => {
-        const totalSeats = Number(transport.seats_available || 0);
-        if (!seatErr && (!seats || seats.length === 0) && totalSeats > 0) {
-          const stmt = db.prepare("INSERT INTO transport_seats (transport_id, seat_no, is_booked) VALUES (?,?,0)");
-          for (let i = 1; i <= totalSeats; i += 1) {
-            stmt.run([transportId, String(i)]);
-          }
-          stmt.finalize(() => {
-            db.all(
-              "SELECT * FROM transport_seats WHERE transport_id=? ORDER BY id ASC",
-              [transportId],
-              (seatErr2, seats2) => {
-                res.render('user/transport-detail', {
-                  title: `${transport.company || transport.type} - Details`,
-                  transport,
-                  seats: seats2 || [],
-                  returnTo,
-                  user: req.session.user
-                });
-              }
-            );
-          });
-          return;
-        }
+router.get('/transport/:id/seat-availability', (req, res) => {
+  const transportId = parseInt(req.params.id, 10);
+  const travelDate = String(req.query.travel_date || '').trim();
+  if (!Number.isInteger(transportId) || transportId <= 0) {
+    return res.status(400).json({ error: 'Invalid transport.' });
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(travelDate)) {
+    return res.status(400).json({ error: 'Invalid travel date.' });
+  }
 
-        res.render('user/transport-detail', {
-          title: `${transport.company || transport.type} - Details`,
-          transport,
-          seats: seats || [],
-          returnTo,
-          user: req.session.user
-        });
+  db.get("SELECT id, seats_available FROM transport WHERE id=?", [transportId], (err, transport) => {
+    if (err || !transport) {
+      return res.status(404).json({ error: 'Transport not found.' });
+    }
+    const totalSeats = Number(transport.seats_available || 0);
+    getTransportSeatAvailability(transportId, totalSeats, travelDate, (availabilityErr, availability) => {
+      if (availabilityErr) {
+        return res.status(500).json({ error: 'Could not load seat availability.' });
       }
-    );
+      return res.json(availability);
+    });
   });
 });
 
@@ -1274,10 +1342,10 @@ router.post('/book/transport', isAuth, (req, res) => {
   } = req.body;
   const transportId = parseInt(transport_id, 10);
   const paymentMethod = normalizePaymentMethod(payment_method || 'wallet');
-  const seatList = String(seat_numbers || '')
+  const seatList = Array.from(new Set(String(seat_numbers || '')
     .split(',')
     .map(s => s.trim())
-    .filter(Boolean);
+    .filter(Boolean)));
   const personsCount = seatList.length ? seatList.length : parseInt(persons, 10);
   const returnTo = safeReturnTo(return_to);
   const validDate = /^\d{4}-\d{2}-\d{2}$/.test(String(travel_date || ''));
@@ -1315,7 +1383,7 @@ router.post('/book/transport', isAuth, (req, res) => {
       [transportId],
       (err, transport) => {
         if (err || !transport) return finish(new Error('NOT_FOUND'));
-        if ((transport.seats_available || 0) < personsCount) return finish(new Error('NOT_ENOUGH_SEATS'));
+        const configuredSeatCount = Number(transport.seats_available || 0);
 
         const isBus = String(transport.type || '').toLowerCase().includes('bus');
         const isFemale = String((req.session.user && req.session.user.gender) || '').toLowerCase() === 'female';
@@ -1323,13 +1391,18 @@ router.post('/book/transport', isAuth, (req, res) => {
         const hasReserved = isBus && seatList.some(s => reservedSet.has(String(s)));
 
         const placeholders = seatList.map(() => '?').join(',');
-        db.all(
-          `SELECT id, seat_no, is_booked FROM transport_seats
-           WHERE transport_id=? AND seat_no IN (${placeholders})`,
-          [transportId, ...seatList],
-          (seatErr, rows) => {
-            if (seatErr || !rows || rows.length !== seatList.length) return finish(new Error('SEAT_MISMATCH'));
-            const hasBooked = rows.some(r => r.is_booked);
+        ensureTransportSeats(transportId, configuredSeatCount, (seatErr, allSeats) => {
+          if (seatErr) return finish(seatErr);
+          const totalSeats = (allSeats || []).length;
+          if (!(totalSeats > 0)) return finish(new Error('NOT_ENOUGH_SEATS'));
+          const validSeatSet = new Set((allSeats || []).map((seat) => String(seat.seat_no)));
+          const hasMissingSeat = seatList.some((seat) => !validSeatSet.has(String(seat)));
+          if (hasMissingSeat) return finish(new Error('SEAT_MISMATCH'));
+
+          getBookedSeatNumbers(transportId, travel_date, (bookedErr, bookedSeats) => {
+            if (bookedErr) return finish(bookedErr);
+            if ((totalSeats - bookedSeats.size) < personsCount) return finish(new Error('NOT_ENOUGH_SEATS'));
+            const hasBooked = seatList.some((seat) => bookedSeats.has(String(seat)));
             if (hasBooked) return finish(new Error('SEAT_TAKEN'));
 
             const calculatedTotal = Number(transport.price || 0) * personsCount;
@@ -1344,39 +1417,22 @@ router.post('/book/transport', isAuth, (req, res) => {
               if (couponErr) return finish(couponErr);
               const { amount: finalAmount, userFee, totalCharge, discount, coupon, couponCode } = pricing;
               const finalizeBooking = () => {
-              db.run(
-                "INSERT INTO bookings (user_id, type, item_id, item_name, check_in, persons, total_price, seat_numbers, notes, status, payment_method, payment_status, payment_fee, payment_gateway_ref, co_travelers, coupon_code, coupon_discount, escrow_status, paid_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'paid_out',CURRENT_TIMESTAMP)",
-                [req.session.user.id, 'transport', transport.id, safeTransportName, travel_date, personsCount, finalAmount, seatList.join(','), warningNote, 'confirmed', paymentMethod, 'paid', userFee, gatewayRef, coTravelersJson, couponCode, discount],
-                function (insertErr) {
-                  if (insertErr) return finish(insertErr);
-                  const bookingId = this.lastID;
-                  const commissionRate = commissionRateFor('transport');
-                  settleBookingFunds(bookingId, req.session.user.id, transport.owner_user_id || null, finalAmount, userFee, commissionRate, (settlementErr) => {
-                    if (settlementErr) return finish(settlementErr);
-
-                    db.run(
-                      `UPDATE transport_seats
-                       SET is_booked=1, booking_id=?, booked_at=CURRENT_TIMESTAMP
-                       WHERE transport_id=? AND seat_no IN (${placeholders})`,
-                      [bookingId, transportId, ...seatList],
-                      function (seatUpdateErr) {
-                        if (seatUpdateErr) return finish(seatUpdateErr);
-                        db.run(
-                          "UPDATE transport SET seats_available = seats_available - ? WHERE id=? AND seats_available >= ?",
-                          [personsCount, transportId, personsCount],
-                          function (availErr) {
-                            if (availErr || this.changes === 0) return finish(availErr || new Error('SEAT_UPDATE_FAIL'));
-                            if (paymentMethod === 'wallet') {
-                              recordWalletTx(req.session.user.id, -totalCharge, 'booking_debit', 'booking', bookingId, 'Transport booking');
-                            }
-                            return markCouponUsed(coupon?.id, bookingId, finish);
-                          }
-                        );
+                db.run(
+                  "INSERT INTO bookings (user_id, type, item_id, item_name, check_in, persons, total_price, seat_numbers, notes, status, payment_method, payment_status, payment_fee, payment_gateway_ref, co_travelers, coupon_code, coupon_discount, escrow_status, paid_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'paid_out',CURRENT_TIMESTAMP)",
+                  [req.session.user.id, 'transport', transport.id, safeTransportName, travel_date, personsCount, finalAmount, seatList.join(','), warningNote, 'confirmed', paymentMethod, 'paid', userFee, gatewayRef, coTravelersJson, couponCode, discount],
+                  function (insertErr) {
+                    if (insertErr) return finish(insertErr);
+                    const bookingId = this.lastID;
+                    const commissionRate = commissionRateFor('transport');
+                    settleBookingFunds(bookingId, req.session.user.id, transport.owner_user_id || null, finalAmount, userFee, commissionRate, (settlementErr) => {
+                      if (settlementErr) return finish(settlementErr);
+                      if (paymentMethod === 'wallet') {
+                        recordWalletTx(req.session.user.id, -totalCharge, 'booking_debit', 'booking', bookingId, 'Transport booking');
                       }
-                    );
-                  });
-                }
-              );
+                      return markCouponUsed(coupon?.id, bookingId, finish);
+                    });
+                  }
+                );
               };
 
               if (paymentMethod !== 'wallet') return finalizeBooking();
@@ -1395,8 +1451,8 @@ router.post('/book/transport', isAuth, (req, res) => {
                 );
               });
             });
-          }
-        );
+          });
+        });
       }
     );
   }, (txErr) => {

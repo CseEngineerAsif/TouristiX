@@ -24,7 +24,7 @@
               <p class="detail-location"><i class="fas fa-route"></i> <%= transport.from_location %> &rarr; <%= transport.to_location %></p>
               <p class="muted-text" style="margin-top:6px;"><i class="fas fa-clock"></i> Departs: <%= transport.departure_time %></p>
             </div>
-            <div class="detail-rating"><i class="fas fa-ticket"></i> <%= transport.seats_available %> seats left</div>
+            <div class="detail-rating"><i class="fas fa-ticket"></i> <span id="seatAvailabilityBadge"><%= transport.seats_available %> total seats</span></div>
           </div>
 
           <div class="info-pills">
@@ -42,6 +42,9 @@
             </div>
             <div id="reservedAlert" class="alert-warning" style="display:none;">
               Reserved seats are for women only. If a man buys these seats, he cannot sit there and no refund will be given.
+            </div>
+            <div id="dateAvailabilityNotice" class="alert-info" style="margin-bottom:10px;">
+              Choose a travel date to see which seats are already booked for that date.
             </div>
 
             <div class="seat-shell">
@@ -94,6 +97,7 @@
             <div class="form-group">
               <label>Travel Date</label>
               <input type="date" name="travel_date" id="t_travel_date" class="form-control" required/>
+              <small id="travelDateHelp" class="muted-text">Select your travel date first, then choose from the seats available on that date.</small>
             </div>
             <button type="submit" class="btn-primary btn-block" id="seatSubmit" disabled>Confirm Booking</button>
           </form>
@@ -135,6 +139,14 @@
   border-radius: 10px;
   font-size: 0.85rem;
   margin: 10px 0 6px;
+}
+.alert-info {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #93c5fd;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 0.85rem;
 }
 
 .seat-shell {
@@ -250,6 +262,12 @@
   color: #94a3b8;
   cursor: not-allowed;
 }
+.seat-tile.awaiting-date {
+  background: #f8fafc;
+  border-color: #dbe4f3;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
 .seat-tile.reserved {
   background: #e8fdf2;
   border-color: #059669;
@@ -307,6 +325,11 @@ const seatTotalInput = document.getElementById('t_total_price');
 const seatSubmit = document.getElementById('seatSubmit');
 const seatMap = document.getElementById('seatMap');
 const travelDate = document.getElementById('t_travel_date');
+const travelDateHelp = document.getElementById('travelDateHelp');
+const dateAvailabilityNotice = document.getElementById('dateAvailabilityNotice');
+const seatAvailabilityBadge = document.getElementById('seatAvailabilityBadge');
+const transportId = "<%= transport.id %>";
+const totalSeatCount = seatData.length || Number("<%= transport.seats_available || 0 %>");
 if (travelDate) {
   const today = new Date().toISOString().split('T')[0];
   travelDate.min = today;
@@ -314,6 +337,7 @@ if (travelDate) {
 
 const seatByNo = new Map(seatData.map(s => [String(s.seat_no), s]));
 const reservedWomenSeats = new Set();
+let bookedSeatSet = new Set();
 
 function initReservedSeats(type) {
   reservedWomenSeats.clear();
@@ -336,21 +360,38 @@ function updateSummary() {
   if (seatNumbersInput) seatNumbersInput.value = list.join(',');
   if (seatPersonsInput) seatPersonsInput.value = list.length;
   if (seatTotalInput) seatTotalInput.value = total;
-  if (seatSubmit) seatSubmit.disabled = list.length === 0;
+  if (seatSubmit) seatSubmit.disabled = list.length === 0 || !travelDate || !travelDate.value;
+}
+
+function updateAvailabilityText(message, tone = 'info') {
+  if (!dateAvailabilityNotice) return;
+  dateAvailabilityNotice.textContent = message;
+  dateAvailabilityNotice.className = tone === 'error' ? 'alert alert-danger' : 'alert-info';
+}
+
+function updateSeatAvailabilityBadge() {
+  if (!seatAvailabilityBadge) return;
+  const availableSeats = Math.max(0, totalSeatCount - bookedSeatSet.size);
+  if (travelDate && travelDate.value) {
+    seatAvailabilityBadge.textContent = `${availableSeats} seats available on ${travelDate.value}`;
+    return;
+  }
+  seatAvailabilityBadge.textContent = `${totalSeatCount} total seats`;
 }
 
 function buildSeatTile(seatNo, label, opts = {}) {
-  const seat = seatByNo.get(String(seatNo));
-  const isBooked = seat && Number(seat.is_booked) === 1;
+  const dateSelected = !!(travelDate && travelDate.value);
+  const isBooked = bookedSeatSet.has(String(seatNo));
   const isReserved = reservedWomenSeats.has(String(seatNo));
   const reservedLocked = false;
   const tile = document.createElement('label');
-  tile.className = `seat-tile ${isBooked ? 'booked' : (isReserved ? 'reserved' : 'available')}`;
+  const awaitingDate = !dateSelected;
+  tile.className = `seat-tile ${awaitingDate ? 'awaiting-date' : (isBooked ? 'booked' : (isReserved ? 'reserved' : 'available'))}`;
   if (isReserved) tile.classList.add('allowed');
   const input = document.createElement('input');
   input.type = 'checkbox';
   input.value = seatNo;
-  input.disabled = isBooked || reservedLocked;
+  input.disabled = awaitingDate || isBooked || reservedLocked;
   input.addEventListener('change', () => {
     if (input.checked) {
       selectedSeats.add(seatNo);
@@ -372,6 +413,45 @@ function buildSeatTile(seatNo, label, opts = {}) {
     tile.appendChild(badge);
   }
   return tile;
+}
+
+async function loadSeatAvailability() {
+  if (!travelDate || !travelDate.value) {
+    bookedSeatSet = new Set();
+    updateAvailabilityText('Choose a travel date to see which seats are already booked for that date.');
+    if (travelDateHelp) travelDateHelp.textContent = 'Select your travel date first, then choose from the seats available on that date.';
+    selectedSeats.clear();
+    updateSeatAvailabilityBadge();
+    renderSeats();
+    updateSummary();
+    return;
+  }
+
+  try {
+    updateAvailabilityText('Checking booked seats for the selected date...');
+    const response = await fetch(`/transport/${transportId}/seat-availability?travel_date=${encodeURIComponent(travelDate.value)}`, {
+      headers: { Accept: 'application/json' }
+    });
+    if (!response.ok) throw new Error('LOAD_FAILED');
+    const payload = await response.json();
+    bookedSeatSet = new Set((payload && payload.bookedSeats) || []);
+    Array.from(selectedSeats).forEach((seatNo) => {
+      if (bookedSeatSet.has(String(seatNo))) selectedSeats.delete(seatNo);
+    });
+    if (travelDateHelp) {
+      const availableSeats = Number(payload?.availableSeats || 0);
+      travelDateHelp.textContent = `${availableSeats} seat${availableSeats === 1 ? '' : 's'} are available for ${travelDate.value}.`;
+    }
+    updateAvailabilityText('Only seats already booked on this date are blocked. The remaining seats can be booked.');
+  } catch (error) {
+    bookedSeatSet = new Set();
+    selectedSeats.clear();
+    if (travelDateHelp) travelDateHelp.textContent = 'We could not verify seat availability for this date right now.';
+    updateAvailabilityText('Could not refresh booked seats for this date. Please try again.', 'error');
+  }
+  updateSeatAvailabilityBadge();
+  renderSeats();
+  updateSummary();
 }
 
 function makeRow(label, leftSeats, rightSeats, opts = {}) {
@@ -506,6 +586,8 @@ function renderLaunch() {
 
 function renderSeats() {
   if (!seatMap) return;
+  seatMap.innerHTML = '';
+  seatMap.className = 'seat-map';
   const type = (seatMap.dataset.type || '').toLowerCase();
   initReservedSeats(type);
   if (type.includes('air')) return renderAir();
@@ -514,7 +596,28 @@ function renderSeats() {
   return renderBus();
 }
 
+if (travelDate) {
+  travelDate.addEventListener('change', loadSeatAvailability);
+}
+
+const bookingForm = document.querySelector('form[action="/book/transport"]');
+if (bookingForm) {
+  bookingForm.addEventListener('submit', (event) => {
+    if (!travelDate || !travelDate.value) {
+      event.preventDefault();
+      updateAvailabilityText('Please choose a travel date before selecting seats.', 'error');
+      if (travelDate) travelDate.focus();
+      return;
+    }
+    if (!selectedSeats.size) {
+      event.preventDefault();
+      updateAvailabilityText('Please select at least one seat for the chosen date.', 'error');
+    }
+  });
+}
+
 renderSeats();
+updateSeatAvailabilityBadge();
 updateSummary();
 </script>
 
