@@ -1,7 +1,7 @@
 <div id="paymentModal" class="modal" style="display:none">
   <div class="modal-box payment-modal-box">
     <div class="modal-header">
-      <h3><i class="fas fa-shield-check"></i> Online Payment Gateway</h3>
+      <h3><i class="fas fa-shield-check"></i> Secure Payment Gateway</h3>
       <button type="button" onclick="closePaymentModal()" class="modal-close">&times;</button>
     </div>
     <div class="modal-form payment-modal-content">
@@ -48,14 +48,6 @@
           <p class="muted-text" style="margin:0;">
             Choose your payment method, then continue to view merchant details and add co-traveler information for this booking.
           </p>
-        </div>
-
-        <div class="gateway-instructions" style="margin-top:14px;">
-          <h4>Coupon Code</h4>
-          <p class="muted-text" style="margin-bottom:10px;">
-            Have a reward coupon from an approved blog post? Enter it here. The discount will be validated when you confirm the booking.
-          </p>
-          <input type="text" id="gatewayCouponCode" class="form-control" placeholder="Enter coupon code" />
         </div>
 
         <div class="co-traveler-section">
@@ -407,7 +399,6 @@
     if (qs('coTravelerFields')) qs('coTravelerFields').innerHTML = '';
     if (qs('coTravelerHelpText')) qs('coTravelerHelpText').textContent = 'No co-traveler details needed for this booking.';
     if (qs('coTravelerCountBadge')) qs('coTravelerCountBadge').textContent = '0';
-    if (qs('gatewayCouponCode')) qs('gatewayCouponCode').value = '';
   };
 
   window.goToPaymentDetails = function goToPaymentDetails() {
@@ -432,7 +423,6 @@
     setHiddenValue(pendingPaymentForm, 'payment_number', '');
     setHiddenValue(pendingPaymentForm, 'payment_txn_id', '');
     setHiddenValue(pendingPaymentForm, 'co_travelers', JSON.stringify(collectCoTravelers()));
-    setHiddenValue(pendingPaymentForm, 'coupon_code', qs('gatewayCouponCode') ? qs('gatewayCouponCode').value : '');
     setHiddenValue(pendingPaymentForm, 'return_to', '/dashboard');
 
     const formToSubmit = pendingPaymentForm;

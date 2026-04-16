@@ -1,55 +1,141 @@
 <%- include('./partials/admin-header') %>
 
-<div class="admin-card">
-  <div class="admin-card-header">
-    <h3><i class="fas fa-money-bill-wave"></i> Escrow Payouts</h3>
+<style>
+.payout-shell {
+  display: grid;
+  gap: 18px;
+}
+.payout-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.payout-stat {
+  background: linear-gradient(180deg, #ffffff, #f8fbff);
+  border: 1px solid #d9e6f2;
+  border-radius: 20px;
+  padding: 18px;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.05);
+}
+.payout-stat span {
+  display: block;
+  color: #64748b;
+  font-size: 0.9rem;
+  margin-bottom: 8px;
+}
+.payout-stat strong {
+  font-size: 1.6rem;
+  color: #0f172a;
+}
+.ledger-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.ledger-badge.paid-out,
+.ledger-badge.released {
+  background: #dcfce7;
+  color: #166534;
+}
+.ledger-badge.refunded {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.ledger-badge.refund_pending {
+  background: #ffedd5;
+  color: #c2410c;
+}
+.ledger-badge.held {
+  background: #fff7d6;
+  color: #8a6700;
+}
+@media (max-width: 900px) {
+  .payout-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .payout-stats {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+
+<div class="payout-shell">
+  <div class="payout-stats">
+    <div class="payout-stat">
+      <span>Total Volume</span>
+      <strong>BDT <%= Number((stats && stats.totalVolume) || 0).toLocaleString() %></strong>
+    </div>
+    <div class="payout-stat">
+      <span>Partner Payouts</span>
+      <strong>BDT <%= Number((stats && stats.totalPartnerPayout) || 0).toLocaleString() %></strong>
+    </div>
+    <div class="payout-stat">
+      <span>Admin Commission</span>
+      <strong>BDT <%= Number((stats && stats.totalCommission) || 0).toLocaleString() %></strong>
+    </div>
+    <div class="payout-stat">
+      <span>Refunded Records</span>
+      <strong><%= Number((stats && stats.refunded) || 0).toLocaleString() %></strong>
+    </div>
   </div>
-  <div class="table-responsive">
-    <table class="admin-table">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Booking</th>
-          <th>Payer</th>
-          <th>Provider</th>
-          <th>Amount</th>
-          <th>Commission</th>
-          <th>Escrow</th>
-          <th>Booking Status</th>
-          <th>Action</th>
-        </tr>
-      </thead>
-      <tbody>
-        <% if (!payouts || payouts.length === 0) { %>
-          <tr><td colspan="9" class="text-muted">No escrow records found.</td></tr>
-        <% } else { %>
-          <% payouts.forEach((p, i) => { %>
-            <tr>
-              <td><%= i + 1 %></td>
-              <td>
-                <strong><%= p.item_name || '-' %></strong><br/>
-                <small><%= p.booking_type %> | Booking ID: <%= p.booking_id %></small>
-              </td>
-              <td><%= p.payer_name %><br/><small><%= p.payer_email %></small></td>
-              <td><%= p.provider_name || 'Unassigned' %><br/><small><%= p.provider_email || '-' %></small></td>
-              <td>BDT <%= (p.amount || 0).toLocaleString() %></td>
-              <td>BDT <%= (p.provider_commission_amount || 0).toLocaleString() %></td>
-              <td><small><%= p.status %></small></td>
-              <td><small><%= p.booking_status %></small></td>
-              <td>
-                <% if (p.status === 'held' && p.booking_status === 'completed') { %>
-                  <form action="/admin/payouts/<%= p.id %>/release" method="POST">
-                    <button type="submit" class="btn-sm">Release</button>
-                  </form>
-                <% } else { %>
-                  <small class="text-muted">N/A</small>
-                <% } %>
-              </td>
-            </tr>
-          <% }) %>
-        <% } %>
-      </tbody>
-    </table>
+
+  <div class="admin-card">
+    <div class="admin-card-header">
+      <h3><i class="fas fa-money-bill-wave"></i> Automatic Payout Ledger</h3>
+      <p class="text-muted" style="margin:6px 0 0;">User payments now split instantly. This page tracks what was sent to the partner and what went to admin.</p>
+    </div>
+    <div class="table-responsive">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Booking</th>
+            <th>Payer</th>
+            <th>Partner</th>
+            <th>Booking Amount</th>
+            <th>Admin Commission</th>
+            <th>Partner Gets</th>
+            <th>User Fee</th>
+            <th>Settlement</th>
+            <th>Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (!payouts || payouts.length === 0) { %>
+            <tr><td colspan="10" class="text-muted">No payout ledger records found.</td></tr>
+          <% } else { %>
+            <% payouts.forEach((p, i) => { %>
+              <% const partnerGets = Math.max(0, Number(p.amount || 0) - Number(p.provider_commission_amount || 0)); %>
+              <% const statusClass = String(p.status || '').toLowerCase().replace(/\s+/g, '-'); %>
+              <tr>
+                <td><%= i + 1 %></td>
+                <td>
+                  <strong><%= p.item_name || '-' %></strong><br/>
+                  <small><%= p.booking_type %> | Booking ID: <%= p.booking_id %> | Booking: <%= p.booking_status %></small>
+                </td>
+                <td><%= p.payer_name %><br/><small><%= p.payer_email %></small></td>
+                <td><%= p.provider_name || 'Admin / Unassigned' %><br/><small><%= p.provider_email || '-' %></small></td>
+                <td>BDT <%= Number(p.amount || 0).toLocaleString() %></td>
+                <td>
+                  BDT <%= Number(p.provider_commission_amount || 0).toLocaleString() %><br/>
+                  <small><%= Math.round(Number(p.provider_commission_rate || 0) * 100) %>%</small>
+                </td>
+                <td>BDT <%= partnerGets.toLocaleString() %></td>
+                <td>BDT <%= Number(p.user_fee_amount || 0).toLocaleString() %></td>
+                <td><span class="ledger-badge <%= statusClass %>"><%= p.status %></span></td>
+                <td><small><%= p.created_at || '-' %></small></td>
+              </tr>
+            <% }) %>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 

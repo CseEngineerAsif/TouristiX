@@ -86,7 +86,7 @@
       <h3>Book Package</h3>
       <button onclick="document.getElementById('pkgModal').style.display='none'" class="modal-close">&times;</button>
     </div>
-    <form action="/book/package" method="POST" class="modal-form js-payment-form">
+    <form action="/book/package" method="POST" class="modal-form js-payment-form" data-booking-kind="package">
       <input type="hidden" name="pkg_id" id="pk_id"/>
       <input type="hidden" name="pkg_name" id="pk_name_hidden"/>
       <input type="hidden" name="total_price" id="pk_total"/>
@@ -128,4 +128,5 @@ function calcPkgPrice() {
 }
 </script>
 
+<%- include('../partials/payment-modal') %>
 <%- include('../partials/footer') %>

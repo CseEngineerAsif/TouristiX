@@ -135,7 +135,7 @@ function withTransaction(work, done) {
 
 function normalizePaymentMethod(method) {
   const value = String(method || '').trim().toLowerCase();
-  if (value === 'bkash' || value === 'nagad') return value;
+  if (value === 'wallet' || value === 'bkash' || value === 'nagad') return value;
   return null;
 }
 
@@ -156,10 +156,128 @@ function buildGatewayRef(method) {
   return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`;
 }
 
+function getWalletTopupGatewayInfo(gateway) {
+  const normalized = String(gateway || '').toLowerCase();
+  if (normalized === 'nagad') {
+    return {
+      label: 'Nagad',
+      merchantName: 'TouristiX Wallet Recharge',
+      merchantNumber: '01753340990'
+    };
+  }
+  return {
+    label: 'bKash',
+    merchantName: 'TouristiX Wallet Recharge',
+    merchantNumber: '01753340989'
+  };
+}
+
+function normalizeCoTravelers(rawValue, travelerCount) {
+  const maxCoTravelers = Math.max(0, Number(travelerCount || 0) - 1);
+  if (!maxCoTravelers) return '';
+
+  let parsed = [];
+  try {
+    parsed = JSON.parse(String(rawValue || '[]'));
+  } catch (err) {
+    parsed = [];
+  }
+  if (!Array.isArray(parsed)) return '';
+
+  const cleaned = parsed
+    .slice(0, maxCoTravelers)
+    .map((item) => {
+      const name = String(item?.name || '').trim();
+      const ageText = String(item?.age || '').trim();
+      const gender = String(item?.gender || '').trim();
+      const phone = String(item?.phone || '').trim();
+      const relation = String(item?.relation || '').trim();
+      const age = /^\d{1,3}$/.test(ageText) ? ageText : '';
+      if (!name && !age && !gender && !phone && !relation) return null;
+      return { name, age, gender, phone, relation };
+    })
+    .filter(Boolean);
+
+  return cleaned.length ? JSON.stringify(cleaned) : '';
+}
+
+function parseCoTravelers(rawValue) {
+  try {
+    const parsed = JSON.parse(String(rawValue || '[]'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function buildTicketNumber(booking) {
+  const typeCode = String(booking?.type || 'trip').slice(0, 3).toUpperCase();
+  const idText = String(booking?.id || 0).padStart(6, '0');
+  return `BT-${typeCode}-${idText}`;
+}
+
+function getMerchantDisplayName(type, itemName) {
+  const normalizedType = String(type || '').trim().toLowerCase();
+  const rawName = String(itemName || '').trim();
+  if (!rawName) return 'TouristiX Merchant';
+  if (normalizedType === 'transport') {
+    const [companyName] = rawName.split(' - ');
+    return companyName || rawName;
+  }
+  return rawName;
+}
+
+function getServicePaymentInfo(type, method, itemName) {
+  const normalizedType = String(type || '').trim().toLowerCase();
+  const normalizedMethod = String(method || '').trim().toLowerCase();
+  const merchantDisplayName = getMerchantDisplayName(normalizedType, itemName);
+
+  if (normalizedMethod === 'wallet') {
+    return {
+      serviceLabel:
+        normalizedType === 'hotel' ? 'Hotel Stay Payment' :
+        normalizedType === 'guide' ? 'Guide Hire Payment' :
+        normalizedType === 'package' ? 'Package Purchase Payment' :
+        'Transport Ticket Payment',
+      merchantName: 'TouristiX Wallet',
+      merchantNumber: 'Internal wallet balance',
+      paymentLabel: 'Wallet'
+    };
+  }
+
+  const gatewayLabel = normalizedMethod === 'nagad' ? 'Nagad' : 'bKash';
+  return {
+    serviceLabel:
+      normalizedType === 'hotel' ? 'Hotel Booking Gateway' :
+      normalizedType === 'guide' ? 'Guide Hire Gateway' :
+      normalizedType === 'package' ? 'Package Purchase Gateway' :
+      'Transport Ticket Gateway',
+    merchantName: merchantDisplayName,
+    merchantNumber:
+      normalizedType === 'hotel' ? '01753340981' :
+      normalizedType === 'guide' ? '01753340982' :
+      normalizedType === 'package' ? '01753340983' :
+      '01753340968',
+    paymentLabel: gatewayLabel
+  };
+}
+
+function creditBookingFeeToAdmin(userFee, bookingId, cb) {
+  if (!(Number(userFee) > 0)) return cb(null);
+  return getAdminUserId((adminId) => {
+    if (!adminId) return cb(null);
+    db.run("UPDATE users SET wallet_balance = wallet_balance + ? WHERE id=?", [userFee, adminId], (err) => {
+      if (err) return cb(err);
+      recordWalletTx(adminId, userFee, 'user_fee', 'booking', bookingId, 'User booking fee');
+      return cb(null);
+    });
+  });
+}
+
 const USER_FEE_RATE = 0.01;
 const COMMISSION_RATES = {
-  hotel: 0.10,
-  transport: 0.10,
+  hotel: 0.05,
+  transport: 0.02,
   guide: 0.03,
   package: 0
 };
@@ -167,6 +285,76 @@ const COMMISSION_RATES = {
 function calcUserFee(amount) {
   const fee = Math.ceil(Number(amount || 0) * USER_FEE_RATE);
   return Number.isFinite(fee) ? fee : 0;
+}
+
+function normalizeCouponCode(code) {
+  return String(code || '').trim().toUpperCase().replace(/\s+/g, '');
+}
+
+function resolveBookingCoupon(userId, rawCode, grossAmount, cb) {
+  const code = normalizeCouponCode(rawCode);
+  const amount = Math.max(0, Math.round(Number(grossAmount || 0)));
+  if (!code) {
+    const userFee = calcUserFee(amount);
+    return cb(null, {
+      coupon: null,
+      couponCode: null,
+      discount: 0,
+      amount,
+      userFee,
+      totalCharge: amount + userFee
+    });
+  }
+
+  db.get(
+    `SELECT * FROM coupons
+     WHERE user_id=? AND code=? AND status='active'
+       AND (expires_at IS NULL OR datetime(expires_at) >= datetime('now'))
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [userId, code],
+    (err, coupon) => {
+      if (err) return cb(err);
+      if (!coupon) return cb(new Error('INVALID_COUPON'));
+      if (amount < Number(coupon.min_order_amount || 0)) return cb(new Error('COUPON_MIN_ORDER'));
+
+      let discount = 0;
+      if (String(coupon.discount_type || 'percent') === 'fixed') {
+        discount = Number(coupon.discount_value || 0);
+      } else {
+        discount = Math.floor(amount * (Number(coupon.discount_value || 0) / 100));
+      }
+      if (Number(coupon.max_discount || 0) > 0) {
+        discount = Math.min(discount, Number(coupon.max_discount || 0));
+      }
+      discount = Math.max(0, Math.min(amount, Math.round(discount)));
+      if (!discount) return cb(new Error('INVALID_COUPON'));
+
+      const discountedAmount = Math.max(0, amount - discount);
+      const userFee = calcUserFee(discountedAmount);
+      return cb(null, {
+        coupon,
+        couponCode: coupon.code,
+        discount,
+        amount: discountedAmount,
+        userFee,
+        totalCharge: discountedAmount + userFee
+      });
+    }
+  );
+}
+
+function markCouponUsed(couponId, bookingId, cb) {
+  if (!couponId) return cb(null);
+  db.run(
+    "UPDATE coupons SET status='used', used_at=CURRENT_TIMESTAMP, used_booking_id=? WHERE id=? AND status='active'",
+    [bookingId, couponId],
+    function (err) {
+      if (err) return cb(err);
+      if (this.changes === 0) return cb(new Error('COUPON_USE_FAILED'));
+      return cb(null);
+    }
+  );
 }
 
 function commissionRateFor(type) {
@@ -206,6 +394,173 @@ function getProviderUserId(type, itemId, cb) {
     });
   }
   return cb(null, null);
+}
+
+function updateWalletBalance(userId, amount, cb) {
+  const normalizedAmount = Math.round(Number(amount || 0));
+  if (!normalizedAmount) return cb(null);
+
+  if (normalizedAmount > 0) {
+    return db.run(
+      "UPDATE users SET wallet_balance = wallet_balance + ? WHERE id=?",
+      [normalizedAmount, userId],
+      function (err) {
+        if (err || this.changes === 0) return cb(err || new Error('WALLET_CREDIT_FAILED'));
+        return cb(null);
+      }
+    );
+  }
+
+  const debitAmount = Math.abs(normalizedAmount);
+  return db.run(
+    "UPDATE users SET wallet_balance = wallet_balance - ? WHERE id=? AND wallet_balance >= ?",
+    [debitAmount, userId, debitAmount],
+    function (err) {
+      if (err || this.changes === 0) return cb(err || new Error('WALLET_DEBIT_FAILED'));
+      return cb(null);
+    }
+  );
+}
+
+function getWalletBalance(userId, cb) {
+  db.get("SELECT wallet_balance FROM users WHERE id=?", [userId], (err, row) => {
+    if (err || !row) return cb(err || new Error('WALLET_NOT_FOUND'));
+    return cb(null, Number(row.wallet_balance || 0));
+  });
+}
+
+function settleBookingFunds(bookingId, payerId, providerUserId, bookingAmount, userFee, commissionRate, cb) {
+  getAdminUserId((adminId) => {
+    if (!adminId) return cb(new Error('ADMIN_NOT_FOUND'));
+
+    const effectiveProviderId = providerUserId || adminId;
+    const amount = Math.max(0, Math.round(Number(bookingAmount || 0)));
+    const feeAmount = Math.max(0, Math.round(Number(userFee || 0)));
+    const rate = Number(commissionRate || 0);
+    const commissionAmount = effectiveProviderId === adminId ? 0 : Math.round(amount * rate);
+    const partnerPayout = Math.max(0, amount - commissionAmount);
+
+    db.run(
+      `INSERT INTO escrow_payments
+       (booking_id, payer_id, provider_user_id, amount, user_fee_amount, provider_commission_rate, provider_commission_amount, status, released_at)
+       VALUES (?,?,?,?,?,?,?,'paid_out',CURRENT_TIMESTAMP)`,
+      [bookingId, payerId, effectiveProviderId, amount, feeAmount, rate, commissionAmount],
+      function (insertErr) {
+        if (insertErr) return cb(insertErr);
+        const payoutLedgerId = this.lastID;
+
+        const creditCommission = () => {
+          if (!(commissionAmount > 0)) return creditUserFee();
+          updateWalletBalance(adminId, commissionAmount, (commissionErr) => {
+            if (commissionErr) return cb(commissionErr);
+            recordWalletTx(adminId, commissionAmount, 'commission', 'booking', bookingId, 'Direct booking commission', (txErr) => {
+              if (txErr) return cb(txErr);
+              return creditUserFee();
+            });
+          });
+        };
+
+        const creditUserFee = () => {
+          if (!(feeAmount > 0)) return cb(null, { payoutLedgerId, adminId, effectiveProviderId, partnerPayout, commissionAmount, feeAmount });
+          updateWalletBalance(adminId, feeAmount, (feeErr) => {
+            if (feeErr) return cb(feeErr);
+            recordWalletTx(adminId, feeAmount, 'user_fee', 'booking', bookingId, 'User booking fee', (txErr) => {
+              if (txErr) return cb(txErr);
+              return cb(null, { payoutLedgerId, adminId, effectiveProviderId, partnerPayout, commissionAmount, feeAmount });
+            });
+          });
+        };
+
+        if (!(partnerPayout > 0)) return creditCommission();
+        updateWalletBalance(effectiveProviderId, partnerPayout, (payoutErr) => {
+          if (payoutErr) return cb(payoutErr);
+          recordWalletTx(effectiveProviderId, partnerPayout, 'payout', 'booking', bookingId, 'Direct booking payout', (txErr) => {
+            if (txErr) return cb(txErr);
+            return creditCommission();
+          });
+        });
+      }
+    );
+  });
+}
+
+function refundBookingSettlement(bookingId, userId, bookingAmount, paymentFee, escrowRecord, note, cb) {
+  getAdminUserId((adminId) => {
+    if (!adminId) return cb(new Error('ADMIN_NOT_FOUND'));
+
+    const escrow = escrowRecord || {};
+    const amount = Math.max(0, Math.round(Number(escrow.amount || bookingAmount || 0)));
+    const feeAmount = Math.max(0, Math.round(Number(escrow.user_fee_amount || paymentFee || 0)));
+    const effectiveProviderId = escrow.provider_user_id || adminId;
+    const escrowStatus = String(escrow.status || 'paid_out').toLowerCase();
+    const commissionAmount = effectiveProviderId === adminId ? 0 : Math.max(0, Math.round(Number(escrow.provider_commission_amount || 0)));
+    const partnerPayout = Math.max(0, amount - commissionAmount);
+    const totalRefund = amount + feeAmount;
+
+    const verifyReversalBalances = (next) => {
+      const needsProviderDebit = partnerPayout > 0 && ['paid_out', 'released'].includes(escrowStatus);
+      const needsAdminDebit = (commissionAmount > 0 || feeAmount > 0) && ['paid_out', 'released'].includes(escrowStatus);
+
+      const checkAdmin = () => {
+        if (!needsAdminDebit) return next(null);
+        const adminNeed = commissionAmount + feeAmount;
+        getWalletBalance(adminId, (adminErr, adminBalance) => {
+          if (adminErr) return next(adminErr);
+          if (adminBalance < adminNeed) return next(new Error('REFUND_PENDING_INSUFFICIENT_FUNDS'));
+          return next(null);
+        });
+      };
+
+      if (!needsProviderDebit) return checkAdmin();
+      getWalletBalance(effectiveProviderId, (providerErr, providerBalance) => {
+        if (providerErr) return next(providerErr);
+        if (providerBalance < partnerPayout) return next(new Error('REFUND_PENDING_INSUFFICIENT_FUNDS'));
+        return checkAdmin();
+      });
+    };
+
+    const reverseUserFee = (next) => {
+      if (!(feeAmount > 0)) return next(null);
+      updateWalletBalance(adminId, -feeAmount, (feeErr) => {
+        if (feeErr) return next(feeErr);
+        recordWalletTx(adminId, -feeAmount, 'user_fee_reversal', 'booking', bookingId, 'Booking fee refund reversal', (txErr) => next(txErr || null));
+      });
+    };
+
+    const reverseCommission = (next) => {
+      if (!(commissionAmount > 0) || !['paid_out', 'released'].includes(escrowStatus)) return next(null);
+      updateWalletBalance(adminId, -commissionAmount, (commissionErr) => {
+        if (commissionErr) return next(commissionErr);
+        recordWalletTx(adminId, -commissionAmount, 'commission_reversal', 'booking', bookingId, 'Booking commission refund reversal', (txErr) => next(txErr || null));
+      });
+    };
+
+    const reversePartnerPayout = (next) => {
+      if (!(partnerPayout > 0) || !['paid_out', 'released'].includes(escrowStatus)) return next(null);
+      updateWalletBalance(effectiveProviderId, -partnerPayout, (payoutErr) => {
+        if (payoutErr) return next(payoutErr);
+        recordWalletTx(effectiveProviderId, -partnerPayout, 'payout_reversal', 'booking', bookingId, 'Booking payout refund reversal', (txErr) => next(txErr || null));
+      });
+    };
+
+    verifyReversalBalances((verifyErr) => {
+      if (verifyErr) return cb(verifyErr);
+      reversePartnerPayout((partnerErr) => {
+        if (partnerErr) return cb(partnerErr);
+        reverseCommission((commissionErr) => {
+          if (commissionErr) return cb(commissionErr);
+          reverseUserFee((feeErr) => {
+            if (feeErr) return cb(feeErr);
+            if (!(totalRefund > 0)) return cb(null);
+            updateWalletBalance(userId, totalRefund, (refundErr) => {
+              if (refundErr) return cb(refundErr);
+              recordWalletTx(userId, totalRefund, 'refund', 'booking', bookingId, note || 'Booking refund', (txErr) => cb(txErr || null));
+            });
+          });
+        });
+      });
+    });
+  });
 }
 
 function safeReturnTo(value) {
@@ -636,6 +991,7 @@ router.get('/blog', (req, res) => {
     `SELECT bp.*, u.name as author_name, u.avatar as author_avatar
      FROM blog_posts bp
      JOIN users u ON u.id = bp.user_id
+     WHERE bp.status='approved'
      ORDER BY bp.created_at DESC`,
     (err, posts) => {
       res.render('user/blog', {
@@ -658,14 +1014,14 @@ router.post('/blog', isAuth, uploadBlogMedia.array('media', 10), (req, res) => {
   const mediaText = media.join(',');
 
   db.run(
-    "INSERT INTO blog_posts (user_id, title, content, media_urls) VALUES (?,?,?,?)",
+    "INSERT INTO blog_posts (user_id, title, content, media_urls, status) VALUES (?,?,?,?, 'pending')",
     [req.session.user.id, title, content, mediaText],
     (err) => {
       if (err) {
         req.flash('error', 'Could not publish blog post. Please try again.');
         return res.redirect('/blog');
       }
-      req.flash('success', 'Blog post published successfully!');
+      req.flash('success', 'Blog post submitted successfully. It is now waiting for admin approval.');
       return res.redirect('/blog');
     }
   );
@@ -678,14 +1034,30 @@ router.get('/dashboard', isAuth, (req, res) => {
     db.all("SELECT * FROM bookings WHERE user_id=? ORDER BY created_at DESC", [uid], (err, bookings) => {
       db.all("SELECT f.*, s.name, s.image, s.district FROM favorites f JOIN tourist_spots s ON f.spot_id=s.id WHERE f.user_id=?", [uid], (err2, favs) => {
         db.all("SELECT * FROM wallet_transactions WHERE user_id=? ORDER BY created_at DESC LIMIT 10", [uid], (err3, walletTx) => {
-          res.render('user/dashboard', {
-            title: 'My Dashboard',
-            profile: profile || null,
-            bookings: bookings || [],
-            favorites: favs || [],
-            walletBalance: (profile && profile.wallet_balance) || 0,
-            walletTx: walletTx || [],
-            user: req.session.user
+          db.all("SELECT * FROM coupons WHERE user_id=? ORDER BY CASE WHEN status='active' THEN 0 ELSE 1 END, created_at DESC", [uid], (err4, coupons) => {
+            db.all("SELECT * FROM wallet_topups WHERE user_id=? ORDER BY created_at DESC LIMIT 8", [uid], (err5, walletTopups) => {
+              const mappedBookings = (bookings || []).map((booking) => ({
+                ...booking,
+                ticket_number: buildTicketNumber(booking),
+                coTravelers: parseCoTravelers(booking.co_travelers)
+              }));
+              res.render('user/dashboard', {
+                title: 'My Dashboard',
+                profile: profile || null,
+                bookings: mappedBookings,
+                favorites: favs || [],
+                walletBalance: (profile && profile.wallet_balance) || 0,
+                walletTx: walletTx || [],
+                walletTopups: walletTopups || [],
+                walletTopupMode: String(process.env.PAYMENT_MODE || '').toLowerCase() === 'mock' ? 'mock' : 'live',
+                walletTopupGatewayInfo: {
+                  bkash: getWalletTopupGatewayInfo('bkash'),
+                  nagad: getWalletTopupGatewayInfo('nagad')
+                },
+                coupons: coupons || [],
+                user: req.session.user
+              });
+            });
           });
         });
       });
@@ -698,20 +1070,30 @@ router.post('/wallet/topup', isAuth, (req, res) => {
   const uid = req.session.user.id;
   const amount = parseInt(req.body.amount, 10);
   const gateway = normalizePaymentMethod(req.body.gateway);
+  const paymentNumber = normalizePaymentNumber(req.body.payment_number);
+  const paymentTxnId = normalizePaymentTxnId(req.body.payment_txn_id);
 
   if (!gateway) {
     req.flash('error', 'Please select bKash or Nagad for top-up.');
     return res.redirect('/dashboard');
   }
-  if (!Number.isInteger(amount) || amount <= 0) {
-    req.flash('error', 'Please enter a valid top-up amount.');
+  if (!Number.isInteger(amount) || amount < 100) {
+    req.flash('error', 'Please enter a valid top-up amount of at least BDT 100.');
+    return res.redirect('/dashboard');
+  }
+  if (!paymentNumber) {
+    req.flash('error', 'Please enter the mobile number used for this payment.');
+    return res.redirect('/dashboard');
+  }
+  if (!paymentTxnId) {
+    req.flash('error', 'Please enter a valid transaction ID.');
     return res.redirect('/dashboard');
   }
 
   const gatewayRef = buildGatewayRef(gateway);
   db.run(
-    "INSERT INTO wallet_topups (user_id, gateway, amount, status, gateway_ref) VALUES (?,?,?,?,?)",
-    [uid, gateway, amount, 'pending', gatewayRef],
+    "INSERT INTO wallet_topups (user_id, gateway, amount, status, gateway_ref, payment_number, payment_txn_id) VALUES (?,?,?,?,?,?,?)",
+    [uid, gateway, amount, 'pending', gatewayRef, paymentNumber, paymentTxnId],
     function (err) {
       if (err) {
         req.flash('error', 'Could not initiate top-up.');
@@ -720,15 +1102,15 @@ router.post('/wallet/topup', isAuth, (req, res) => {
 
       const autoApprove = String(process.env.PAYMENT_MODE || '').toLowerCase() === 'mock';
       if (!autoApprove) {
-        req.flash('error', 'Gateway API is not configured yet. Please set credentials and switch PAYMENT_MODE=live.');
+        req.flash('success', `Top-up request submitted and is pending verification. Reference: ${gatewayRef}`);
         return res.redirect('/dashboard');
       }
 
       const topupId = this.lastID;
       db.run("UPDATE wallet_topups SET status='paid', paid_at=CURRENT_TIMESTAMP WHERE id=?", [topupId], () => {
         db.run("UPDATE users SET wallet_balance = wallet_balance + ? WHERE id=?", [amount, uid], () => {
-          recordWalletTx(uid, amount, 'topup', 'wallet_topup', topupId, `${gateway} top-up`);
-          req.flash('success', 'Wallet topped up successfully.');
+          recordWalletTx(uid, amount, 'topup', 'wallet_topup', topupId, `${gateway} top-up (${paymentTxnId})`);
+          req.flash('success', `Wallet topped up successfully. Reference: ${gatewayRef}`);
           return res.redirect('/dashboard');
         });
       });
@@ -758,72 +1140,81 @@ router.post('/dashboard/profile/photo', isAuth, uploadAvatar.single('avatar'), (
 // Book Hotel
 router.post('/book/hotel', isAuth, (req, res) => {
   const {
-    hotel_id, hotel_name, check_in, check_out, persons, total_price, return_to
+    hotel_id, hotel_name, check_in, check_out, persons, total_price, return_to, payment_method, co_travelers, coupon_code
   } = req.body;
   const returnTo = safeReturnTo(return_to);
+  const paymentMethod = normalizePaymentMethod(payment_method || 'wallet');
+  const personCount = Math.max(1, parseInt(persons, 10) || 1);
+  const coTravelersJson = normalizeCoTravelers(co_travelers, personCount);
   const amount = Number(total_price || 0);
   if (!Number.isFinite(amount) || amount <= 0) {
     req.flash('error', 'Invalid booking amount.');
     return res.redirect('/hotels');
   }
-  const userFee = calcUserFee(amount);
-  const totalCharge = amount + userFee;
+  if (!paymentMethod) {
+    req.flash('error', 'Please select a valid payment method.');
+    return res.redirect('/hotels');
+  }
+  const gatewayRef = paymentMethod === 'wallet' ? null : buildGatewayRef(paymentMethod);
 
   withTransaction((finish) => {
-    getProviderUserId('hotel', hotel_id, (ownerErr, ownerId) => {
-      if (ownerErr) return finish(ownerErr);
-      db.get("SELECT wallet_balance FROM users WHERE id=?", [req.session.user.id], (walletErr, me) => {
-        if (walletErr || !me) return finish(walletErr || new Error('WALLET_NOT_FOUND'));
-        if ((me.wallet_balance || 0) < totalCharge) return finish(new Error('INSUFFICIENT_BALANCE'));
-
+    resolveBookingCoupon(req.session.user.id, coupon_code, amount, (couponErr, pricing) => {
+      if (couponErr) return finish(couponErr);
+      getProviderUserId('hotel', hotel_id, (ownerErr, ownerId) => {
+        if (ownerErr) return finish(ownerErr);
+        const { amount: finalAmount, userFee, totalCharge, discount, coupon, couponCode } = pricing;
+        const finalizeBooking = () => {
         db.run(
-          "UPDATE users SET wallet_balance = wallet_balance - ? WHERE id=? AND wallet_balance >= ?",
-          [totalCharge, req.session.user.id, totalCharge],
-          function (debitErr) {
-            if (debitErr || this.changes === 0) return finish(debitErr || new Error('WALLET_DEBIT_FAILED'));
-
-            db.run(
-              "INSERT INTO bookings (user_id, type, item_id, item_name, check_in, check_out, persons, total_price, payment_method, payment_status, payment_fee, escrow_status, paid_at) VALUES (?,?,?,?,?,?,?,?,?,'held',?,'held',CURRENT_TIMESTAMP)",
-              [req.session.user.id, 'hotel', hotel_id, hotel_name, check_in, check_out, persons, amount, 'wallet', userFee],
-              function (insertErr) {
-                if (insertErr) return finish(insertErr);
-                const bookingId = this.lastID;
-                const commissionRate = commissionRateFor('hotel');
-                const commissionAmount = Math.round(amount * commissionRate);
-                db.run(
-                  "INSERT INTO escrow_payments (booking_id, payer_id, provider_user_id, amount, user_fee_amount, provider_commission_rate, provider_commission_amount, status) VALUES (?,?,?,?,?,?,?,'held')",
-                  [bookingId, req.session.user.id, ownerId, amount, userFee, commissionRate, commissionAmount],
-                  function (escrowErr) {
-                    if (escrowErr) return finish(escrowErr);
-                    recordWalletTx(req.session.user.id, -totalCharge, 'booking_debit', 'booking', bookingId, 'Hotel booking');
-                    if (userFee > 0) {
-                      return getAdminUserId((adminId) => {
-                        if (!adminId) return finish(null);
-                        db.run("UPDATE users SET wallet_balance = wallet_balance + ? WHERE id=?", [userFee, adminId], () => {
-                          recordWalletTx(adminId, userFee, 'user_fee', 'booking', bookingId, 'User booking fee');
-                          return finish(null);
-                        });
-                      });
-                    }
-                    return finish(null);
-                  }
-                );
+          "INSERT INTO bookings (user_id, type, item_id, item_name, check_in, check_out, persons, total_price, status, payment_method, payment_status, payment_fee, payment_gateway_ref, co_travelers, coupon_code, coupon_discount, escrow_status, paid_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'paid_out',CURRENT_TIMESTAMP)",
+          [req.session.user.id, 'hotel', hotel_id, hotel_name, check_in, check_out, personCount, finalAmount, 'confirmed', paymentMethod, 'paid', userFee, gatewayRef, coTravelersJson, couponCode, discount],
+          function (insertErr) {
+            if (insertErr) return finish(insertErr);
+            const bookingId = this.lastID;
+            const commissionRate = commissionRateFor('hotel');
+            settleBookingFunds(bookingId, req.session.user.id, ownerId, finalAmount, userFee, commissionRate, (settlementErr) => {
+              if (settlementErr) return finish(settlementErr);
+              if (paymentMethod === 'wallet') {
+                recordWalletTx(req.session.user.id, -totalCharge, 'booking_debit', 'booking', bookingId, 'Hotel booking');
               }
-            );
+              return markCouponUsed(coupon?.id, bookingId, finish);
+            });
           }
         );
+        };
+
+        if (paymentMethod !== 'wallet') return finalizeBooking();
+
+        db.get("SELECT wallet_balance FROM users WHERE id=?", [req.session.user.id], (walletErr, me) => {
+          if (walletErr || !me) return finish(walletErr || new Error('WALLET_NOT_FOUND'));
+          if ((me.wallet_balance || 0) < totalCharge) return finish(new Error('INSUFFICIENT_BALANCE'));
+
+          db.run(
+            "UPDATE users SET wallet_balance = wallet_balance - ? WHERE id=? AND wallet_balance >= ?",
+            [totalCharge, req.session.user.id, totalCharge],
+            function (debitErr) {
+              if (debitErr || this.changes === 0) return finish(debitErr || new Error('WALLET_DEBIT_FAILED'));
+              return finalizeBooking();
+            }
+          );
+        });
       });
     });
   }, (txErr) => {
     if (txErr) {
       if (txErr.message === 'INSUFFICIENT_BALANCE') {
         req.flash('error', 'Not enough wallet balance. Please top up your wallet.');
+      } else if (txErr.message === 'INVALID_COUPON') {
+        req.flash('error', 'Coupon code is invalid, expired, or already used.');
+      } else if (txErr.message === 'COUPON_MIN_ORDER') {
+        req.flash('error', 'This coupon requires a higher booking amount.');
       } else {
         req.flash('error', 'Could not complete hotel booking. Please try again.');
       }
       return res.redirect('/hotels');
     }
-    req.flash('success', 'Hotel booked successfully! Payment is held in escrow.');
+    req.flash('success', paymentMethod === 'wallet'
+      ? 'Hotel booked and confirmed successfully using your wallet! Partner payout and admin commission were sent instantly.'
+      : `Hotel booked and confirmed successfully! ${paymentMethod === 'bkash' ? 'bKash' : 'Nagad'} payment was completed automatically and the payout split was sent instantly.`);
     return res.redirect(returnTo || '/dashboard');
   });
 });
@@ -879,9 +1270,10 @@ router.get('/transport/:id', (req, res) => {
 // Book Transport
 router.post('/book/transport', isAuth, (req, res) => {
   const {
-    transport_id, transport_name, travel_date, persons, return_to, seat_numbers
+    transport_id, transport_name, travel_date, persons, return_to, seat_numbers, payment_method, co_travelers, coupon_code
   } = req.body;
   const transportId = parseInt(transport_id, 10);
+  const paymentMethod = normalizePaymentMethod(payment_method || 'wallet');
   const seatList = String(seat_numbers || '')
     .split(',')
     .map(s => s.trim())
@@ -890,6 +1282,7 @@ router.post('/book/transport', isAuth, (req, res) => {
   const returnTo = safeReturnTo(return_to);
   const validDate = /^\d{4}-\d{2}-\d{2}$/.test(String(travel_date || ''));
   const isValidPersons = Number.isInteger(personsCount) && personsCount >= 1 && personsCount <= 10;
+  const coTravelersJson = normalizeCoTravelers(co_travelers, personsCount);
 
   if (!Number.isInteger(transportId) || transportId <= 0) {
     req.flash('error', 'Invalid transport option selected.');
@@ -910,6 +1303,10 @@ router.post('/book/transport', isAuth, (req, res) => {
   const todayStr = new Date().toISOString().split('T')[0];
   if (travel_date < todayStr) {
     req.flash('error', 'Travel date cannot be in the past.');
+    return res.redirect('/transport');
+  }
+  if (!paymentMethod) {
+    req.flash('error', 'Please select a valid payment method.');
     return res.redirect('/transport');
   }
   withTransaction((finish) => {
@@ -936,71 +1333,67 @@ router.post('/book/transport', isAuth, (req, res) => {
             if (hasBooked) return finish(new Error('SEAT_TAKEN'));
 
             const calculatedTotal = Number(transport.price || 0) * personsCount;
-            const userFee = calcUserFee(calculatedTotal);
-            const totalCharge = calculatedTotal + userFee;
+            const gatewayRef = paymentMethod === 'wallet' ? null : buildGatewayRef(paymentMethod);
             const safeTransportName =
               `${transport.company || transport_name || transport.type} - ${transport.from_location} to ${transport.to_location}`;
 
             const warningNote = (!isFemale && hasReserved)
               ? 'Reserved seats are for women only. Non-refundable and not allowed to sit in reserved seats.'
               : null;
-            db.get("SELECT wallet_balance FROM users WHERE id=?", [req.session.user.id], (walletErr, me) => {
-              if (walletErr || !me) return finish(walletErr || new Error('WALLET_NOT_FOUND'));
-              if ((me.wallet_balance || 0) < totalCharge) return finish(new Error('INSUFFICIENT_BALANCE'));
-
+            resolveBookingCoupon(req.session.user.id, coupon_code, calculatedTotal, (couponErr, pricing) => {
+              if (couponErr) return finish(couponErr);
+              const { amount: finalAmount, userFee, totalCharge, discount, coupon, couponCode } = pricing;
+              const finalizeBooking = () => {
               db.run(
-                "UPDATE users SET wallet_balance = wallet_balance - ? WHERE id=? AND wallet_balance >= ?",
-                [totalCharge, req.session.user.id, totalCharge],
-                function (debitErr) {
-                  if (debitErr || this.changes === 0) return finish(debitErr || new Error('WALLET_DEBIT_FAILED'));
+                "INSERT INTO bookings (user_id, type, item_id, item_name, check_in, persons, total_price, seat_numbers, notes, status, payment_method, payment_status, payment_fee, payment_gateway_ref, co_travelers, coupon_code, coupon_discount, escrow_status, paid_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'paid_out',CURRENT_TIMESTAMP)",
+                [req.session.user.id, 'transport', transport.id, safeTransportName, travel_date, personsCount, finalAmount, seatList.join(','), warningNote, 'confirmed', paymentMethod, 'paid', userFee, gatewayRef, coTravelersJson, couponCode, discount],
+                function (insertErr) {
+                  if (insertErr) return finish(insertErr);
+                  const bookingId = this.lastID;
+                  const commissionRate = commissionRateFor('transport');
+                  settleBookingFunds(bookingId, req.session.user.id, transport.owner_user_id || null, finalAmount, userFee, commissionRate, (settlementErr) => {
+                    if (settlementErr) return finish(settlementErr);
 
-                  db.run(
-                    "INSERT INTO bookings (user_id, type, item_id, item_name, check_in, persons, total_price, seat_numbers, notes, payment_method, payment_status, payment_fee, escrow_status, paid_at) VALUES (?,?,?,?,?,?,?,?,?,?,'held',?,'held',CURRENT_TIMESTAMP)",
-                    [req.session.user.id, 'transport', transport.id, safeTransportName, travel_date, personsCount, calculatedTotal, seatList.join(','), warningNote, 'wallet', userFee],
-                    function (insertErr) {
-                      if (insertErr) return finish(insertErr);
-                      const bookingId = this.lastID;
-                      const commissionRate = commissionRateFor('transport');
-                      const commissionAmount = Math.round(calculatedTotal * commissionRate);
-                      db.run(
-                        "INSERT INTO escrow_payments (booking_id, payer_id, provider_user_id, amount, user_fee_amount, provider_commission_rate, provider_commission_amount, status) VALUES (?,?,?,?,?,?,?,'held')",
-                        [bookingId, req.session.user.id, transport.owner_user_id || null, calculatedTotal, userFee, commissionRate, commissionAmount],
-                        function (escrowErr) {
-                          if (escrowErr) return finish(escrowErr);
-
-                          db.run(
-                            `UPDATE transport_seats
-                             SET is_booked=1, booking_id=?, booked_at=CURRENT_TIMESTAMP
-                             WHERE transport_id=? AND seat_no IN (${placeholders})`,
-                            [bookingId, transportId, ...seatList],
-                            function (seatUpdateErr) {
-                              if (seatUpdateErr) return finish(seatUpdateErr);
-                              db.run(
-                                "UPDATE transport SET seats_available = seats_available - ? WHERE id=? AND seats_available >= ?",
-                                [personsCount, transportId, personsCount],
-                                function (availErr) {
-                                  if (availErr || this.changes === 0) return finish(availErr || new Error('SEAT_UPDATE_FAIL'));
-                                  recordWalletTx(req.session.user.id, -totalCharge, 'booking_debit', 'booking', bookingId, 'Transport booking');
-                                  if (userFee > 0) {
-                                    return getAdminUserId((adminId) => {
-                                      if (!adminId) return finish(null);
-                                      db.run("UPDATE users SET wallet_balance = wallet_balance + ? WHERE id=?", [userFee, adminId], () => {
-                                        recordWalletTx(adminId, userFee, 'user_fee', 'booking', bookingId, 'User booking fee');
-                                        return finish(null);
-                                      });
-                                    });
-                                  }
-                                  return finish(null);
-                                }
-                              );
+                    db.run(
+                      `UPDATE transport_seats
+                       SET is_booked=1, booking_id=?, booked_at=CURRENT_TIMESTAMP
+                       WHERE transport_id=? AND seat_no IN (${placeholders})`,
+                      [bookingId, transportId, ...seatList],
+                      function (seatUpdateErr) {
+                        if (seatUpdateErr) return finish(seatUpdateErr);
+                        db.run(
+                          "UPDATE transport SET seats_available = seats_available - ? WHERE id=? AND seats_available >= ?",
+                          [personsCount, transportId, personsCount],
+                          function (availErr) {
+                            if (availErr || this.changes === 0) return finish(availErr || new Error('SEAT_UPDATE_FAIL'));
+                            if (paymentMethod === 'wallet') {
+                              recordWalletTx(req.session.user.id, -totalCharge, 'booking_debit', 'booking', bookingId, 'Transport booking');
                             }
-                          );
-                        }
-                      );
-                    }
-                  );
+                            return markCouponUsed(coupon?.id, bookingId, finish);
+                          }
+                        );
+                      }
+                    );
+                  });
                 }
               );
+              };
+
+              if (paymentMethod !== 'wallet') return finalizeBooking();
+
+              db.get("SELECT wallet_balance FROM users WHERE id=?", [req.session.user.id], (walletErr, me) => {
+                if (walletErr || !me) return finish(walletErr || new Error('WALLET_NOT_FOUND'));
+                if ((me.wallet_balance || 0) < totalCharge) return finish(new Error('INSUFFICIENT_BALANCE'));
+
+                db.run(
+                  "UPDATE users SET wallet_balance = wallet_balance - ? WHERE id=? AND wallet_balance >= ?",
+                  [totalCharge, req.session.user.id, totalCharge],
+                  function (debitErr) {
+                    if (debitErr || this.changes === 0) return finish(debitErr || new Error('WALLET_DEBIT_FAILED'));
+                    return finalizeBooking();
+                  }
+                );
+              });
             });
           }
         );
@@ -1018,12 +1411,18 @@ router.post('/book/transport', isAuth, (req, res) => {
         req.flash('error', 'Selected seats are not available for this transport.');
       } else if (txErr.message === 'INSUFFICIENT_BALANCE') {
         req.flash('error', 'Not enough wallet balance. Please top up your wallet.');
+      } else if (txErr.message === 'INVALID_COUPON') {
+        req.flash('error', 'Coupon code is invalid, expired, or already used.');
+      } else if (txErr.message === 'COUPON_MIN_ORDER') {
+        req.flash('error', 'This coupon requires a higher booking amount.');
       } else {
         req.flash('error', 'Could not complete transport booking. Please try again.');
       }
       return res.redirect('/transport');
     }
-    req.flash('success', 'Transport booked successfully! Payment is held in escrow.');
+    req.flash('success', paymentMethod === 'wallet'
+      ? 'Transport booked and confirmed successfully using your wallet! Partner payout and admin commission were sent instantly.'
+      : `Transport booked and confirmed successfully! ${paymentMethod === 'bkash' ? 'bKash' : 'Nagad'} payment was completed automatically and the payout split was sent instantly.`);
     return res.redirect(returnTo || '/dashboard');
   });
 });
@@ -1045,7 +1444,7 @@ router.post('/bookings/:id/release-ticket', isAuth, (req, res) => {
         return res.redirect('/transport');
       }
       if (booking.status !== 'confirmed') {
-        req.flash('error', 'Only admin-confirmed transport tickets can be released.');
+        req.flash('error', 'Only confirmed transport tickets can be released.');
         return res.redirect('/transport');
       }
       if (booking.exchange_locked) {
@@ -1305,72 +1704,80 @@ router.post('/exchange-requests/:id/reject', isAuth, (req, res) => {
 // Book Guide
 router.post('/book/guide', isAuth, (req, res) => {
   const {
-    guide_id, guide_name, start_date, days, total_price, return_to
+    guide_id, guide_name, start_date, days, total_price, return_to, payment_method, co_travelers, coupon_code
   } = req.body;
   const returnTo = safeReturnTo(return_to);
+  const paymentMethod = normalizePaymentMethod(payment_method || 'wallet');
+  const coTravelersJson = normalizeCoTravelers(co_travelers, 1);
   const amount = Number(total_price || 0);
   if (!Number.isFinite(amount) || amount <= 0) {
     req.flash('error', 'Invalid booking amount.');
     return res.redirect('/guides');
   }
-  const userFee = calcUserFee(amount);
-  const totalCharge = amount + userFee;
+  if (!paymentMethod) {
+    req.flash('error', 'Please select a valid payment method.');
+    return res.redirect('/guides');
+  }
+  const gatewayRef = paymentMethod === 'wallet' ? null : buildGatewayRef(paymentMethod);
 
   withTransaction((finish) => {
-    getProviderUserId('guide', guide_id, (ownerErr, ownerId) => {
-      if (ownerErr) return finish(ownerErr);
-      db.get("SELECT wallet_balance FROM users WHERE id=?", [req.session.user.id], (walletErr, me) => {
-        if (walletErr || !me) return finish(walletErr || new Error('WALLET_NOT_FOUND'));
-        if ((me.wallet_balance || 0) < totalCharge) return finish(new Error('INSUFFICIENT_BALANCE'));
-
+    resolveBookingCoupon(req.session.user.id, coupon_code, amount, (couponErr, pricing) => {
+      if (couponErr) return finish(couponErr);
+      getProviderUserId('guide', guide_id, (ownerErr, ownerId) => {
+        if (ownerErr) return finish(ownerErr);
+        const { amount: finalAmount, userFee, totalCharge, discount, coupon, couponCode } = pricing;
+        const finalizeBooking = () => {
         db.run(
-          "UPDATE users SET wallet_balance = wallet_balance - ? WHERE id=? AND wallet_balance >= ?",
-          [totalCharge, req.session.user.id, totalCharge],
-          function (debitErr) {
-            if (debitErr || this.changes === 0) return finish(debitErr || new Error('WALLET_DEBIT_FAILED'));
-
-            db.run(
-              "INSERT INTO bookings (user_id, type, item_id, item_name, check_in, persons, total_price, payment_method, payment_status, payment_fee, escrow_status, paid_at) VALUES (?,?,?,?,?,?,?,?,?,'held',?,'held',CURRENT_TIMESTAMP)",
-              [req.session.user.id, 'guide', guide_id, guide_name, start_date, days, amount, 'wallet', userFee],
-              function (insertErr) {
-                if (insertErr) return finish(insertErr);
-                const bookingId = this.lastID;
-                const commissionRate = commissionRateFor('guide');
-                const commissionAmount = Math.round(amount * commissionRate);
-                db.run(
-                  "INSERT INTO escrow_payments (booking_id, payer_id, provider_user_id, amount, user_fee_amount, provider_commission_rate, provider_commission_amount, status) VALUES (?,?,?,?,?,?,?,'held')",
-                  [bookingId, req.session.user.id, ownerId, amount, userFee, commissionRate, commissionAmount],
-                  function (escrowErr) {
-                    if (escrowErr) return finish(escrowErr);
-                    recordWalletTx(req.session.user.id, -totalCharge, 'booking_debit', 'booking', bookingId, 'Guide booking');
-                    if (userFee > 0) {
-                      return getAdminUserId((adminId) => {
-                        if (!adminId) return finish(null);
-                        db.run("UPDATE users SET wallet_balance = wallet_balance + ? WHERE id=?", [userFee, adminId], () => {
-                          recordWalletTx(adminId, userFee, 'user_fee', 'booking', bookingId, 'User booking fee');
-                          return finish(null);
-                        });
-                      });
-                    }
-                    return finish(null);
-                  }
-                );
+          "INSERT INTO bookings (user_id, type, item_id, item_name, check_in, persons, total_price, status, payment_method, payment_status, payment_fee, payment_gateway_ref, co_travelers, coupon_code, coupon_discount, escrow_status, paid_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'paid_out',CURRENT_TIMESTAMP)",
+          [req.session.user.id, 'guide', guide_id, guide_name, start_date, days, finalAmount, 'confirmed', paymentMethod, 'paid', userFee, gatewayRef, coTravelersJson, couponCode, discount],
+          function (insertErr) {
+            if (insertErr) return finish(insertErr);
+            const bookingId = this.lastID;
+            const commissionRate = commissionRateFor('guide');
+            settleBookingFunds(bookingId, req.session.user.id, ownerId, finalAmount, userFee, commissionRate, (settlementErr) => {
+              if (settlementErr) return finish(settlementErr);
+              if (paymentMethod === 'wallet') {
+                recordWalletTx(req.session.user.id, -totalCharge, 'booking_debit', 'booking', bookingId, 'Guide booking');
               }
-            );
+              return markCouponUsed(coupon?.id, bookingId, finish);
+            });
           }
         );
+        };
+
+        if (paymentMethod !== 'wallet') return finalizeBooking();
+
+        db.get("SELECT wallet_balance FROM users WHERE id=?", [req.session.user.id], (walletErr, me) => {
+          if (walletErr || !me) return finish(walletErr || new Error('WALLET_NOT_FOUND'));
+          if ((me.wallet_balance || 0) < totalCharge) return finish(new Error('INSUFFICIENT_BALANCE'));
+
+          db.run(
+            "UPDATE users SET wallet_balance = wallet_balance - ? WHERE id=? AND wallet_balance >= ?",
+            [totalCharge, req.session.user.id, totalCharge],
+            function (debitErr) {
+              if (debitErr || this.changes === 0) return finish(debitErr || new Error('WALLET_DEBIT_FAILED'));
+              return finalizeBooking();
+            }
+          );
+        });
       });
     });
   }, (txErr) => {
     if (txErr) {
       if (txErr.message === 'INSUFFICIENT_BALANCE') {
         req.flash('error', 'Not enough wallet balance. Please top up your wallet.');
+      } else if (txErr.message === 'INVALID_COUPON') {
+        req.flash('error', 'Coupon code is invalid, expired, or already used.');
+      } else if (txErr.message === 'COUPON_MIN_ORDER') {
+        req.flash('error', 'This coupon requires a higher booking amount.');
       } else {
         req.flash('error', 'Could not complete guide booking. Please try again.');
       }
       return res.redirect('/guides');
     }
-    req.flash('success', 'Guide hired successfully! Payment is held in escrow.');
+    req.flash('success', paymentMethod === 'wallet'
+      ? 'Guide hired and confirmed successfully using your wallet! Partner payout and admin commission were sent instantly.'
+      : `Guide hired and confirmed successfully! ${paymentMethod === 'bkash' ? 'bKash' : 'Nagad'} payment was completed automatically and the payout split was sent instantly.`);
     return res.redirect(returnTo || '/dashboard');
   });
 });
@@ -1378,73 +1785,115 @@ router.post('/book/guide', isAuth, (req, res) => {
 // Book Package
 router.post('/book/package', isAuth, (req, res) => {
   const {
-    pkg_id, pkg_name, travel_date, persons, total_price
+    pkg_id, pkg_name, travel_date, persons, total_price, payment_method, co_travelers, coupon_code
   } = req.body;
+  const paymentMethod = normalizePaymentMethod(payment_method || 'wallet');
+  const personCount = Math.max(1, parseInt(persons, 10) || 1);
+  const coTravelersJson = normalizeCoTravelers(co_travelers, personCount);
   const amount = Number(total_price || 0);
   if (!Number.isFinite(amount) || amount <= 0) {
     req.flash('error', 'Invalid booking amount.');
     return res.redirect('/packages');
   }
-  const userFee = calcUserFee(amount);
-  const totalCharge = amount + userFee;
+  if (!paymentMethod) {
+    req.flash('error', 'Please select a valid payment method.');
+    return res.redirect('/packages');
+  }
+  const gatewayRef = paymentMethod === 'wallet' ? null : buildGatewayRef(paymentMethod);
 
   withTransaction((finish) => {
-    getProviderUserId('package', pkg_id, (ownerErr, ownerId) => {
-      if (ownerErr) return finish(ownerErr);
-      db.get("SELECT wallet_balance FROM users WHERE id=?", [req.session.user.id], (walletErr, me) => {
-        if (walletErr || !me) return finish(walletErr || new Error('WALLET_NOT_FOUND'));
-        if ((me.wallet_balance || 0) < totalCharge) return finish(new Error('INSUFFICIENT_BALANCE'));
-
+    resolveBookingCoupon(req.session.user.id, coupon_code, amount, (couponErr, pricing) => {
+      if (couponErr) return finish(couponErr);
+      getProviderUserId('package', pkg_id, (ownerErr, ownerId) => {
+        if (ownerErr) return finish(ownerErr);
+        const { amount: finalAmount, userFee, totalCharge, discount, coupon, couponCode } = pricing;
+        const finalizeBooking = () => {
         db.run(
-          "UPDATE users SET wallet_balance = wallet_balance - ? WHERE id=? AND wallet_balance >= ?",
-          [totalCharge, req.session.user.id, totalCharge],
-          function (debitErr) {
-            if (debitErr || this.changes === 0) return finish(debitErr || new Error('WALLET_DEBIT_FAILED'));
-
-            db.run(
-              "INSERT INTO bookings (user_id, type, item_id, item_name, check_in, persons, total_price, payment_method, payment_status, payment_fee, escrow_status, paid_at) VALUES (?,?,?,?,?,?,?,?,?,'held',?,'held',CURRENT_TIMESTAMP)",
-              [req.session.user.id, 'package', pkg_id, pkg_name, travel_date, persons, amount, 'wallet', userFee],
-              function (insertErr) {
-                if (insertErr) return finish(insertErr);
-                const bookingId = this.lastID;
-                const commissionRate = commissionRateFor('package');
-                const commissionAmount = Math.round(amount * commissionRate);
-                db.run(
-                  "INSERT INTO escrow_payments (booking_id, payer_id, provider_user_id, amount, user_fee_amount, provider_commission_rate, provider_commission_amount, status) VALUES (?,?,?,?,?,?,?,'held')",
-                  [bookingId, req.session.user.id, ownerId, amount, userFee, commissionRate, commissionAmount],
-                  function (escrowErr) {
-                    if (escrowErr) return finish(escrowErr);
-                    recordWalletTx(req.session.user.id, -totalCharge, 'booking_debit', 'booking', bookingId, 'Package booking');
-                    if (userFee > 0) {
-                      return getAdminUserId((adminId) => {
-                        if (!adminId) return finish(null);
-                        db.run("UPDATE users SET wallet_balance = wallet_balance + ? WHERE id=?", [userFee, adminId], () => {
-                          recordWalletTx(adminId, userFee, 'user_fee', 'booking', bookingId, 'User booking fee');
-                          return finish(null);
-                        });
-                      });
-                    }
-                    return finish(null);
-                  }
-                );
+          "INSERT INTO bookings (user_id, type, item_id, item_name, check_in, persons, total_price, status, payment_method, payment_status, payment_fee, payment_gateway_ref, co_travelers, coupon_code, coupon_discount, escrow_status, paid_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'paid_out',CURRENT_TIMESTAMP)",
+          [req.session.user.id, 'package', pkg_id, pkg_name, travel_date, personCount, finalAmount, 'confirmed', paymentMethod, 'paid', userFee, gatewayRef, coTravelersJson, couponCode, discount],
+          function (insertErr) {
+            if (insertErr) return finish(insertErr);
+            const bookingId = this.lastID;
+            const commissionRate = commissionRateFor('package');
+            settleBookingFunds(bookingId, req.session.user.id, ownerId, finalAmount, userFee, commissionRate, (settlementErr) => {
+              if (settlementErr) return finish(settlementErr);
+              if (paymentMethod === 'wallet') {
+                recordWalletTx(req.session.user.id, -totalCharge, 'booking_debit', 'booking', bookingId, 'Package booking');
               }
-            );
+              return markCouponUsed(coupon?.id, bookingId, finish);
+            });
           }
         );
+        };
+
+        if (paymentMethod !== 'wallet') return finalizeBooking();
+
+        db.get("SELECT wallet_balance FROM users WHERE id=?", [req.session.user.id], (walletErr, me) => {
+          if (walletErr || !me) return finish(walletErr || new Error('WALLET_NOT_FOUND'));
+          if ((me.wallet_balance || 0) < totalCharge) return finish(new Error('INSUFFICIENT_BALANCE'));
+
+          db.run(
+            "UPDATE users SET wallet_balance = wallet_balance - ? WHERE id=? AND wallet_balance >= ?",
+            [totalCharge, req.session.user.id, totalCharge],
+            function (debitErr) {
+              if (debitErr || this.changes === 0) return finish(debitErr || new Error('WALLET_DEBIT_FAILED'));
+              return finalizeBooking();
+            }
+          );
+        });
       });
     });
   }, (txErr) => {
     if (txErr) {
       if (txErr.message === 'INSUFFICIENT_BALANCE') {
         req.flash('error', 'Not enough wallet balance. Please top up your wallet.');
+      } else if (txErr.message === 'INVALID_COUPON') {
+        req.flash('error', 'Coupon code is invalid, expired, or already used.');
+      } else if (txErr.message === 'COUPON_MIN_ORDER') {
+        req.flash('error', 'This coupon requires a higher booking amount.');
       } else {
         req.flash('error', 'Could not complete package booking. Please try again.');
       }
       return res.redirect('/packages');
     }
-    req.flash('success', 'Package booked! Payment is held in escrow.');
+    req.flash('success', paymentMethod === 'wallet'
+      ? 'Package booked and confirmed successfully using your wallet! Partner payout and admin commission were sent instantly.'
+      : `Package booked and confirmed successfully! ${paymentMethod === 'bkash' ? 'bKash' : 'Nagad'} payment was completed automatically and the payout split was sent instantly.`);
     return res.redirect('/dashboard');
   });
+});
+
+router.get('/bookings/:id/ticket', isAuth, (req, res) => {
+  const bookingId = parseInt(req.params.id, 10);
+  if (!Number.isInteger(bookingId) || bookingId <= 0) return res.redirect('/dashboard');
+
+  db.get(
+    `SELECT b.*, u.name as user_name, u.email as user_email, u.phone as user_phone
+     FROM bookings b
+     JOIN users u ON u.id = b.user_id
+     WHERE b.id=? AND b.user_id=?`,
+    [bookingId, req.session.user.id],
+    (err, booking) => {
+      if (err || !booking) {
+        req.flash('error', 'Ticket not found.');
+        return res.redirect('/dashboard');
+      }
+      const ticketData = {
+        ...booking,
+        ticket_number: buildTicketNumber(booking),
+        coTravelers: parseCoTravelers(booking.co_travelers),
+        paymentInfo: getServicePaymentInfo(booking.type, booking.payment_method, booking.item_name)
+      };
+      if (String(req.query.download || '') === '1') {
+        res.setHeader('Content-Disposition', `attachment; filename="ticket-${ticketData.ticket_number}.html"`);
+      }
+      return res.render('user/ticket', {
+        title: `${ticketData.ticket_number} Ticket`,
+        ticket: ticketData,
+        user: req.session.user
+      });
+    }
+  );
 });
 
 // Add Review
@@ -1479,7 +1928,8 @@ router.post('/spots/:id/favorite', isAuth, (req, res) => {
 router.post('/bookings/:id/cancel', isAuth, (req, res) => {
   db.get(
     `SELECT b.id, b.status, b.exchange_locked, b.payment_fee, b.total_price,
-            e.id as escrow_id, e.status as escrow_status, e.amount as escrow_amount
+            e.id as escrow_id, e.status as escrow_status, e.amount as escrow_amount,
+            e.provider_user_id, e.user_fee_amount, e.provider_commission_amount
      FROM bookings b
      LEFT JOIN escrow_payments e ON e.booking_id = b.id
      WHERE b.id=? AND b.user_id=?`,
@@ -1496,23 +1946,47 @@ router.post('/bookings/:id/cancel', isAuth, (req, res) => {
 
       const refundAmount = Number(booking.escrow_amount || booking.total_price || 0);
       const refundFee = Number(booking.payment_fee || 0);
-      const totalRefund = refundAmount + refundFee;
 
       withTransaction((finish) => {
-        db.run("UPDATE bookings SET status='cancelled', escrow_status='refunded' WHERE id=? AND user_id=?", [booking.id, req.session.user.id], (updErr) => {
+        db.run("UPDATE bookings SET status='cancelled' WHERE id=? AND user_id=?", [booking.id, req.session.user.id], (updErr) => {
           if (updErr) return finish(updErr);
-          if (booking.escrow_id && booking.escrow_status === 'held') {
-            db.run("UPDATE escrow_payments SET status='refunded', released_at=CURRENT_TIMESTAMP WHERE id=?", [booking.escrow_id], (escrowErr) => {
-              if (escrowErr) return finish(escrowErr);
-              if (totalRefund > 0) {
-                db.run("UPDATE users SET wallet_balance = wallet_balance + ? WHERE id=?", [totalRefund, req.session.user.id], () => {
-                  recordWalletTx(req.session.user.id, totalRefund, 'refund', 'booking', booking.id, 'Booking refund');
-                  return finish(null);
-                });
-              } else {
-                return finish(null);
+          if (booking.escrow_id) {
+            refundBookingSettlement(
+              booking.id,
+              req.session.user.id,
+              refundAmount,
+              refundFee,
+              {
+                id: booking.escrow_id,
+                status: booking.escrow_status,
+                amount: booking.escrow_amount,
+                provider_user_id: booking.provider_user_id,
+                user_fee_amount: booking.user_fee_amount,
+                provider_commission_amount: booking.provider_commission_amount
+              },
+              'Booking refund',
+              (refundErr) => {
+                if (refundErr && refundErr.message === 'REFUND_PENDING_INSUFFICIENT_FUNDS') {
+                  return db.run(
+                    "UPDATE bookings SET escrow_status='refund_pending', payment_status='refund_pending' WHERE id=? AND user_id=?",
+                    [booking.id, req.session.user.id],
+                    (bookPendingErr) => {
+                      if (bookPendingErr) return finish(bookPendingErr);
+                      db.run("UPDATE escrow_payments SET status='refund_pending' WHERE id=?", [booking.escrow_id], (escrowPendingErr) => finish(escrowPendingErr || null));
+                    }
+                  );
+                }
+                if (refundErr) return finish(refundErr);
+                db.run(
+                  "UPDATE bookings SET escrow_status='refunded', payment_status='refunded' WHERE id=? AND user_id=?",
+                  [booking.id, req.session.user.id],
+                  (bookRefundErr) => {
+                    if (bookRefundErr) return finish(bookRefundErr);
+                    db.run("UPDATE escrow_payments SET status='refunded', released_at=CURRENT_TIMESTAMP WHERE id=?", [booking.escrow_id], (escrowErr) => finish(escrowErr || null));
+                  }
+                );
               }
-            });
+            );
           } else {
             return finish(null);
           }
@@ -1522,7 +1996,18 @@ router.post('/bookings/:id/cancel', isAuth, (req, res) => {
           req.flash('error', 'Could not cancel booking. Please try again.');
           return res.redirect('/dashboard');
         }
-        req.flash('success', 'Booking cancelled successfully.');
+        if (booking.escrow_id && String(booking.escrow_status || '').toLowerCase() !== 'refunded') {
+          db.get("SELECT status FROM escrow_payments WHERE id=?", [booking.escrow_id], (statusErr, row) => {
+            if (!statusErr && String(row?.status || '').toLowerCase() === 'refund_pending') {
+              req.flash('success', 'Booking cancelled. Refund is marked pending because partner/admin wallet balance is currently low.');
+              return res.redirect('/dashboard');
+            }
+            req.flash('success', 'Booking cancelled and refund processed successfully.');
+            return res.redirect('/dashboard');
+          });
+          return;
+        }
+        req.flash('success', 'Booking cancelled and refund processed successfully.');
         return res.redirect('/dashboard');
       });
     }

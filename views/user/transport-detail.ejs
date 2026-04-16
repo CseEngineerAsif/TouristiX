@@ -83,7 +83,7 @@
             <h3><i class="fas fa-ticket"></i> Book Now</h3>
           </div>
           <% if (locals.user) { %>
-          <form action="/book/transport" method="POST" class="modal-form js-payment-form">
+          <form action="/book/transport" method="POST" class="modal-form js-payment-form" data-booking-kind="transport">
             <input type="hidden" name="transport_id" value="<%= transport.id %>"/>
             <input type="hidden" name="transport_name" value="<%= transport.company || transport.type %>"/>
             <input type="hidden" name="total_price" id="t_total_price" value="0"/>

@@ -35,6 +35,11 @@ function withTransaction(work, done) {
   });
 }
 
+function generateCouponCode() {
+  const part = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `BLOG-${Date.now().toString().slice(-6)}-${part}`;
+}
+
 // Dashboard
 router.get('/dashboard', isAdmin, (req, res) => {
   db.get("SELECT COUNT(*) as cnt FROM users WHERE role='user'", (e1, users) => {
@@ -66,6 +71,79 @@ router.post('/users/:id/delete', isAdmin, (req, res) => {
   res.redirect('/admin/users');
 });
 
+// Blogs
+router.get('/blogs', isAdmin, (req, res) => {
+  db.all(
+    `SELECT bp.*, u.name as author_name, u.email as author_email, c.code as reward_coupon_code
+     FROM blog_posts bp
+     JOIN users u ON u.id = bp.user_id
+     LEFT JOIN coupons c ON c.id = bp.reward_coupon_id
+     ORDER BY CASE WHEN bp.status='pending' THEN 0 ELSE 1 END, bp.created_at DESC`,
+    (err, posts) => {
+      res.render('admin/blogs', {
+        title: 'Manage Blogs',
+        posts: posts || [],
+        user: req.session.user
+      });
+    }
+  );
+});
+
+router.post('/blogs/:id/approve', isAdmin, (req, res) => {
+  const blogId = req.params.id;
+  db.get("SELECT * FROM blog_posts WHERE id=?", [blogId], (err, post) => {
+    if (err || !post) {
+      req.flash('error', 'Blog post not found.');
+      return res.redirect('/admin/blogs');
+    }
+    if (post.status === 'approved') {
+      req.flash('success', 'Blog post is already approved.');
+      return res.redirect('/admin/blogs');
+    }
+
+    const couponCode = generateCouponCode();
+    withTransaction((finish) => {
+      db.run(
+        `INSERT INTO coupons (user_id, code, discount_type, discount_value, max_discount, min_order_amount, status, reward_source, reward_ref_id, note, expires_at)
+         VALUES (?, ?, 'percent', 10, 500, 500, 'active', 'blog_post', ?, 'Reward coupon for approved blog post', datetime('now', '+30 days'))`,
+        [post.user_id, couponCode, blogId],
+        function (couponErr) {
+          if (couponErr) return finish(couponErr);
+          db.run(
+            "UPDATE blog_posts SET status='approved', approved_at=CURRENT_TIMESTAMP, approved_by=?, rejection_note=NULL, reward_coupon_id=? WHERE id=?",
+            [req.session.user.id, this.lastID, blogId],
+            (updateErr) => finish(updateErr || null)
+          );
+        }
+      );
+    }, (txErr) => {
+      if (txErr) {
+        req.flash('error', 'Could not approve blog post.');
+        return res.redirect('/admin/blogs');
+      }
+      req.flash('success', `Blog approved and reward coupon created: ${couponCode}`);
+      return res.redirect('/admin/blogs');
+    });
+  });
+});
+
+router.post('/blogs/:id/reject', isAdmin, (req, res) => {
+  const blogId = req.params.id;
+  const rejectionNote = String(req.body.rejection_note || '').trim();
+  db.run(
+    "UPDATE blog_posts SET status='rejected', approved_at=NULL, approved_by=?, rejection_note=?, reward_coupon_id=NULL WHERE id=?",
+    [req.session.user.id, rejectionNote || 'Rejected by admin.', blogId],
+    function (err) {
+      if (err || this.changes === 0) {
+        req.flash('error', 'Could not reject blog post.');
+        return res.redirect('/admin/blogs');
+      }
+      req.flash('success', 'Blog post rejected.');
+      return res.redirect('/admin/blogs');
+    }
+  );
+});
+
 // Bookings
 router.get('/bookings', isAdmin, (req, res) => {
   db.all("SELECT b.*, u.name as user_name, u.email FROM bookings b JOIN users u ON b.user_id=u.id ORDER BY b.created_at DESC", (err, bookings) => {
@@ -91,13 +169,33 @@ router.get('/bookings', isAdmin, (req, res) => {
   });
 });
 router.post('/bookings/:id/status', isAdmin, (req, res) => {
-  const nextStatus = req.body.status;
-  if (nextStatus === 'completed') {
-    db.run("UPDATE bookings SET status=?, escrow_status='ready' WHERE id=?", [nextStatus, req.params.id]);
-  } else {
-    db.run("UPDATE bookings SET status=? WHERE id=?", [nextStatus, req.params.id]);
+  const nextStatus = String(req.body.status || '').toLowerCase();
+  if (!['pending', 'confirmed', 'completed', 'cancelled'].includes(nextStatus)) {
+    req.flash('error', 'Invalid booking status.');
+    return res.redirect('/admin/bookings');
   }
-  res.redirect('/admin/bookings');
+  db.get("SELECT id, status FROM bookings WHERE id=?", [req.params.id], (err, booking) => {
+    if (err || !booking) {
+      req.flash('error', 'Booking not found.');
+      return res.redirect('/admin/bookings');
+    }
+    if (booking.status === nextStatus) {
+      req.flash('success', `Booking already ${nextStatus}.`);
+      return res.redirect('/admin/bookings');
+    }
+    if (booking.status === 'cancelled' || booking.status === 'completed') {
+      req.flash('error', `${booking.status.charAt(0).toUpperCase() + booking.status.slice(1)} bookings cannot be changed.`);
+      return res.redirect('/admin/bookings');
+    }
+    db.run("UPDATE bookings SET status=? WHERE id=?", [nextStatus, req.params.id], (updateErr) => {
+      if (updateErr) {
+        req.flash('error', 'Could not update booking status.');
+        return res.redirect('/admin/bookings');
+      }
+      req.flash('success', `Booking ${nextStatus} successfully.`);
+      return res.redirect('/admin/bookings');
+    });
+  });
 });
 
 router.post('/exchange-requests/:id/approve', isAdmin, (req, res) => {
@@ -105,7 +203,7 @@ router.post('/exchange-requests/:id/approve', isAdmin, (req, res) => {
   return res.redirect('/admin/bookings');
 });
 
-// Payouts (Escrow release)
+// Payout ledger
 router.get('/payouts', isAdmin, (req, res) => {
   db.all(
     `SELECT e.*, b.item_name, b.type as booking_type, b.status as booking_status, b.escrow_status as booking_escrow_status,
@@ -117,79 +215,41 @@ router.get('/payouts', isAdmin, (req, res) => {
      LEFT JOIN users provider ON provider.id = e.provider_user_id
      ORDER BY e.created_at DESC`,
     (err, payouts) => {
-      res.render('admin/payouts', { title: 'Manage Payouts', payouts: payouts || [], user: req.session.user });
+      const rows = payouts || [];
+      const stats = rows.reduce((acc, row) => {
+        const amount = Number(row.amount || 0);
+        const commission = Number(row.provider_commission_amount || 0);
+        const partnerGets = Math.max(0, amount - commission);
+        if (String(row.status || '').toLowerCase() === 'refunded') {
+          acc.refunded += 1;
+        } else {
+          acc.paidOut += 1;
+        }
+        acc.totalVolume += amount;
+        acc.totalCommission += commission;
+        acc.totalPartnerPayout += partnerGets;
+        return acc;
+      }, {
+        paidOut: 0,
+        refunded: 0,
+        totalVolume: 0,
+        totalCommission: 0,
+        totalPartnerPayout: 0
+      });
+
+      res.render('admin/payouts', {
+        title: 'Manage Payouts',
+        payouts: rows,
+        stats,
+        user: req.session.user
+      });
     }
   );
 });
 
 router.post('/payouts/:id/release', isAdmin, (req, res) => {
-  const escrowId = req.params.id;
-  db.get(
-    `SELECT e.*, b.status as booking_status, b.escrow_status as booking_escrow_status
-     FROM escrow_payments e
-     JOIN bookings b ON b.id = e.booking_id
-     WHERE e.id = ?`,
-    [escrowId],
-    (err, escrow) => {
-      if (err || !escrow) {
-        req.flash('error', 'Escrow record not found.');
-        return res.redirect('/admin/payouts');
-      }
-      if (escrow.status !== 'held') {
-        req.flash('error', 'Escrow is not in held state.');
-        return res.redirect('/admin/payouts');
-      }
-      if (escrow.booking_status !== 'completed') {
-        req.flash('error', 'Booking must be completed before release.');
-        return res.redirect('/admin/payouts');
-      }
-
-      const adminId = req.session.user.id;
-      const providerId = escrow.provider_user_id || adminId;
-      const commission = providerId === adminId ? 0 : Number(escrow.provider_commission_amount || 0);
-      const payoutAmount = Number(escrow.amount || 0) - commission;
-
-      withTransaction((finish) => {
-        db.run("UPDATE escrow_payments SET status='released', released_at=CURRENT_TIMESTAMP WHERE id=?", [escrowId], (updErr) => {
-          if (updErr) return finish(updErr);
-          db.run("UPDATE bookings SET payment_status='released', escrow_status='released' WHERE id=?", [escrow.booking_id], (bookErr) => {
-            if (bookErr) return finish(bookErr);
-
-            if (payoutAmount > 0) {
-              db.run("UPDATE users SET wallet_balance = wallet_balance + ? WHERE id=?", [payoutAmount, providerId], () => {
-                db.run(
-                  "INSERT INTO wallet_transactions (user_id, amount, type, ref_type, ref_id, note) VALUES (?,?,?,?,?,?)",
-                  [providerId, payoutAmount, 'payout', 'escrow', escrowId, 'Escrow release'],
-                  () => {
-                    if (commission > 0) {
-                      db.run("UPDATE users SET wallet_balance = wallet_balance + ? WHERE id=?", [commission, adminId], () => {
-                        db.run(
-                          "INSERT INTO wallet_transactions (user_id, amount, type, ref_type, ref_id, note) VALUES (?,?,?,?,?,?)",
-                          [adminId, commission, 'commission', 'escrow', escrowId, 'Provider commission'],
-                          () => finish(null)
-                        );
-                      });
-                    } else {
-                      finish(null);
-                    }
-                  }
-                );
-              });
-            } else {
-              finish(null);
-            }
-          });
-        });
-      }, (txErr) => {
-        if (txErr) {
-          req.flash('error', 'Could not release payout.');
-          return res.redirect('/admin/payouts');
-        }
-        req.flash('success', 'Payout released successfully.');
-        return res.redirect('/admin/payouts');
-      });
-    }
-  );
+  req.flash('error', 'Manual payout release is no longer needed. Booking payments now split instantly between partner and admin.');
+  return res.redirect('/admin/payouts');
 });
 
 // Spots
@@ -225,7 +285,7 @@ router.post('/spots/:id/edit', isAdmin, upload.single('image'), (req, res) => {
 // Hotels
 router.get('/hotels', isAdmin, (req, res) => {
   db.all("SELECT * FROM hotels ORDER BY id DESC", (err, hotels) => {
-    db.all("SELECT id, name, email FROM users WHERE role='owner_hotel' ORDER BY name ASC", (err2, owners) => {
+    db.all("SELECT id, name, email FROM users WHERE role='owner_hotel' AND email NOT IN ('partner@gmail.com', 'partner2@gmail.com') ORDER BY name ASC", (err2, owners) => {
       res.render('admin/hotels', { title: 'Manage Hotels', hotels: hotels || [], owners: owners || [], user: req.session.user });
     });
   });
@@ -244,7 +304,7 @@ router.post('/hotels/add', isAdmin, upload.single('image'), (req, res) => {
 router.get('/hotels/:id/edit', isAdmin, (req, res) => {
   db.get("SELECT * FROM hotels WHERE id=?", [req.params.id], (err, hotel) => {
     if (err || !hotel) return res.redirect('/admin/hotels');
-    db.all("SELECT id, name, email FROM users WHERE role='owner_hotel' ORDER BY name ASC", (err2, owners) => {
+    db.all("SELECT id, name, email FROM users WHERE role='owner_hotel' AND email NOT IN ('partner@gmail.com', 'partner2@gmail.com') ORDER BY name ASC", (err2, owners) => {
       res.render('admin/hotel-edit', { title: 'Edit Hotel', hotel, owners: owners || [], user: req.session.user });
     });
   });
@@ -266,7 +326,7 @@ router.post('/hotels/:id/delete', isAdmin, (req, res) => {
 // Guides
 router.get('/guides', isAdmin, (req, res) => {
   db.all("SELECT * FROM guides ORDER BY id DESC", (err, guides) => {
-    db.all("SELECT id, name, email FROM users WHERE role='owner_guide' ORDER BY name ASC", (err2, owners) => {
+    db.all("SELECT id, name, email FROM users WHERE role='owner_guide' AND email NOT IN ('partner@gmail.com', 'partner2@gmail.com') ORDER BY name ASC", (err2, owners) => {
       res.render('admin/guides', { title: 'Manage Guides', guides: guides || [], owners: owners || [], user: req.session.user });
     });
   });
@@ -288,7 +348,7 @@ router.post('/guides/add', isAdmin, upload.single('image'), (req, res) => {
 router.get('/guides/:id/edit', isAdmin, (req, res) => {
   db.get("SELECT * FROM guides WHERE id=?", [req.params.id], (err, guide) => {
     if (err || !guide) return res.redirect('/admin/guides');
-    db.all("SELECT id, name, email FROM users WHERE role='owner_guide' ORDER BY name ASC", (err2, owners) => {
+    db.all("SELECT id, name, email FROM users WHERE role='owner_guide' AND email NOT IN ('partner@gmail.com', 'partner2@gmail.com') ORDER BY name ASC", (err2, owners) => {
       res.render('admin/guide-edit', { title: 'Edit Guide', guide, owners: owners || [], user: req.session.user });
     });
   });
@@ -310,7 +370,7 @@ router.post('/guides/:id/delete', isAdmin, (req, res) => {
 // Transport
 router.get('/transport', isAdmin, (req, res) => {
   db.all("SELECT * FROM transport ORDER BY id DESC", (err, transports) => {
-    db.all("SELECT id, name, email FROM users WHERE role='owner_transport' ORDER BY name ASC", (err2, owners) => {
+    db.all("SELECT id, name, email FROM users WHERE role='owner_transport' AND email NOT IN ('partner@gmail.com', 'partner2@gmail.com') ORDER BY name ASC", (err2, owners) => {
       res.render('admin/transports', { title: 'Manage Transport', transports: transports || [], owners: owners || [], user: req.session.user });
     });
   });
@@ -332,7 +392,7 @@ router.post('/transport/add', isAdmin, upload.single('image'), (req, res) => {
 router.get('/transport/:id/edit', isAdmin, (req, res) => {
   db.get("SELECT * FROM transport WHERE id=?", [req.params.id], (err, transport) => {
     if (err || !transport) return res.redirect('/admin/transport');
-    db.all("SELECT id, name, email FROM users WHERE role='owner_transport' ORDER BY name ASC", (err2, owners) => {
+    db.all("SELECT id, name, email FROM users WHERE role='owner_transport' AND email NOT IN ('partner@gmail.com', 'partner2@gmail.com') ORDER BY name ASC", (err2, owners) => {
       res.render('admin/transport-edit', { title: 'Edit Transport', transport, owners: owners || [], user: req.session.user });
     });
   });
@@ -354,7 +414,7 @@ router.post('/transport/:id/delete', isAdmin, (req, res) => {
 // Packages
 router.get('/packages', isAdmin, (req, res) => {
   db.all("SELECT * FROM packages ORDER BY id DESC", (err, packages) => {
-    db.all("SELECT id, name, email FROM users WHERE role='owner_package' ORDER BY name ASC", (err2, owners) => {
+    db.all("SELECT id, name, email FROM users WHERE role='owner_package' AND email NOT IN ('partner@gmail.com', 'partner2@gmail.com') ORDER BY name ASC", (err2, owners) => {
       res.render('admin/packages', { title: 'Manage Packages', packages: packages || [], owners: owners || [], user: req.session.user });
     });
   });
@@ -376,7 +436,7 @@ router.post('/packages/add', isAdmin, upload.single('image'), (req, res) => {
 router.get('/packages/:id/edit', isAdmin, (req, res) => {
   db.get("SELECT * FROM packages WHERE id=?", [req.params.id], (err, pkg) => {
     if (err || !pkg) return res.redirect('/admin/packages');
-    db.all("SELECT id, name, email FROM users WHERE role='owner_package' ORDER BY name ASC", (err2, owners) => {
+    db.all("SELECT id, name, email FROM users WHERE role='owner_package' AND email NOT IN ('partner@gmail.com', 'partner2@gmail.com') ORDER BY name ASC", (err2, owners) => {
       res.render('admin/package-edit', { title: 'Edit Package', pkg, owners: owners || [], user: req.session.user });
     });
   });

@@ -7,6 +7,399 @@
   </div>
 </section>
 
+<style>
+.coupon-showcase {
+  display: grid;
+  gap: 22px;
+}
+.coupon-hero {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top right, rgba(250, 204, 21, 0.28), transparent 30%),
+    linear-gradient(135deg, #0f766e, #0f172a 68%, #1d4ed8);
+  border-radius: 28px;
+  color: #fff;
+  padding: 28px;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.16);
+}
+.coupon-hero::after {
+  content: '';
+  position: absolute;
+  width: 220px;
+  height: 220px;
+  right: -70px;
+  bottom: -90px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.09);
+}
+.coupon-hero-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.8fr);
+  gap: 20px;
+  align-items: stretch;
+}
+.coupon-hero h3 {
+  margin: 0 0 10px;
+  font-size: clamp(1.8rem, 3vw, 2.5rem);
+  line-height: 1.08;
+}
+.coupon-hero p {
+  margin: 0;
+  max-width: 680px;
+  color: rgba(255, 255, 255, 0.82);
+  line-height: 1.75;
+}
+.coupon-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 22px;
+}
+.coupon-stat {
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+  padding: 14px;
+  backdrop-filter: blur(10px);
+}
+.coupon-stat strong {
+  display: block;
+  font-size: 1.35rem;
+  margin-bottom: 4px;
+}
+.coupon-stat span {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.9rem;
+}
+.coupon-help {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 22px;
+  padding: 22px;
+  backdrop-filter: blur(12px);
+}
+.coupon-help h4 {
+  margin: 0 0 10px;
+  font-size: 1.05rem;
+}
+.coupon-help ul {
+  margin: 0;
+  padding-left: 18px;
+  color: rgba(255, 255, 255, 0.86);
+  line-height: 1.8;
+}
+.coupon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+}
+.coupon-card {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, #fff, #f8fbff);
+  border: 1px solid #dbe7f3;
+  border-radius: 20px;
+  padding: 16px;
+  box-shadow: 0 14px 26px rgba(15, 23, 42, 0.07);
+}
+.coupon-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 8px;
+  background: linear-gradient(180deg, #22c55e, #0891b2);
+}
+.coupon-card.used::before,
+.coupon-card.expired::before {
+  background: linear-gradient(180deg, #94a3b8, #64748b);
+}
+.coupon-card-top {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.coupon-code-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #e0f2fe;
+  color: #0f172a;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  font-size: 0.84rem;
+  max-width: 100%;
+  overflow: hidden;
+}
+.coupon-code-pill span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.coupon-code-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.coupon-copy-btn {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #0f172a;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  white-space: nowrap;
+}
+.coupon-copy-btn:hover {
+  background: #ecfeff;
+  border-color: #67e8f9;
+  color: #155e75;
+}
+.coupon-card.used .coupon-code-pill,
+.coupon-card.expired .coupon-code-pill {
+  background: #e2e8f0;
+  color: #475569;
+}
+.coupon-discount {
+  font-size: 1.7rem;
+  font-weight: 900;
+  color: #0f172a;
+  line-height: 1;
+  margin-bottom: 5px;
+}
+.coupon-caption {
+  color: #64748b;
+  font-size: 0.88rem;
+}
+.coupon-meta-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+.coupon-meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  font-size: 0.88rem;
+}
+.coupon-meta-row span:first-child {
+  color: #64748b;
+}
+.coupon-empty {
+  background: linear-gradient(180deg, #fff, #f8fafc);
+  border: 1px dashed #bfd0ea;
+  border-radius: 24px;
+  padding: 42px 24px;
+  text-align: center;
+  box-shadow: 0 16px 28px rgba(15, 23, 42, 0.06);
+}
+.coupon-empty i {
+  font-size: 3rem;
+  color: #94a3b8;
+  margin-bottom: 14px;
+}
+.wallet-showcase {
+  display: grid;
+  gap: 22px;
+}
+.wallet-hero {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top right, rgba(34, 197, 94, 0.28), transparent 30%),
+    linear-gradient(135deg, #052e16, #14532d 45%, #0f766e 100%);
+  border-radius: 28px;
+  color: #fff;
+  padding: 28px;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.16);
+}
+.wallet-hero::after {
+  content: '';
+  position: absolute;
+  width: 220px;
+  height: 220px;
+  right: -70px;
+  bottom: -90px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+}
+.wallet-hero-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr);
+  gap: 20px;
+}
+.wallet-balance-panel h3 {
+  margin: 0 0 8px;
+  font-size: clamp(1.8rem, 3vw, 2.5rem);
+}
+.wallet-balance-panel p {
+  margin: 0;
+  color: rgba(255,255,255,0.82);
+  line-height: 1.7;
+}
+.wallet-balance-amount {
+  font-size: clamp(2rem, 3vw, 3rem);
+  font-weight: 900;
+  margin: 18px 0 14px;
+}
+.wallet-quick-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.wallet-stat {
+  background: rgba(255,255,255,0.14);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 18px;
+  padding: 14px;
+  backdrop-filter: blur(10px);
+}
+.wallet-stat strong {
+  display: block;
+  font-size: 1.15rem;
+  margin-bottom: 4px;
+}
+.wallet-stat span {
+  color: rgba(255,255,255,0.78);
+  font-size: 0.88rem;
+}
+.wallet-merchant-panel {
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 22px;
+  padding: 20px;
+  backdrop-filter: blur(12px);
+}
+.wallet-merchant-panel h4 {
+  margin: 0 0 12px;
+  font-size: 1.05rem;
+}
+.wallet-merchant-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.12);
+}
+.wallet-merchant-row:last-child {
+  border-bottom: 0;
+}
+.wallet-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.wallet-card {
+  background: linear-gradient(180deg, #fff, #f8fbff);
+  border: 1px solid #dbe7f3;
+  border-radius: 24px;
+  padding: 22px;
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.08);
+}
+.wallet-card h3 {
+  margin: 0 0 8px;
+}
+.wallet-card p {
+  color: #64748b;
+}
+.wallet-topup-form {
+  display: grid;
+  gap: 14px;
+}
+.wallet-topup-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.wallet-amount-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.wallet-chip {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #0f172a;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.wallet-hint-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+.wallet-hint-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 12px 14px;
+}
+.wallet-topup-list {
+  display: grid;
+  gap: 12px;
+}
+.wallet-topup-item {
+  display: grid;
+  gap: 6px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  padding: 14px;
+}
+.wallet-topup-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+.wallet-topup-meta {
+  color: #64748b;
+  font-size: 0.88rem;
+}
+@media (max-width: 920px) {
+  .coupon-hero-grid {
+    grid-template-columns: 1fr;
+  }
+  .wallet-hero-grid,
+  .wallet-layout {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 640px) {
+  .coupon-hero {
+    padding: 22px 18px;
+  }
+  .coupon-stat-grid {
+    grid-template-columns: 1fr;
+  }
+  .wallet-hero {
+    padding: 22px 18px;
+  }
+  .wallet-quick-stats,
+  .wallet-topup-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+
 <section class="section">
   <div class="container">
     <% if (locals.success_msg) { %><div class="alert alert-success"><%= success_msg %></div><% } %>
@@ -16,10 +409,10 @@
       <button class="tab-btn" onclick="showTab('profile', this)"><i class="fas fa-user-circle"></i> Profile</button>
       <button class="tab-btn" onclick="showTab('wallet', this)"><i class="fas fa-wallet"></i> My Wallet Balance</button>
       <button class="tab-btn active" onclick="showTab('bookings', this)"><i class="fas fa-calendar-check"></i> My Bookings (<%= bookings.length %>)</button>
+      <button class="tab-btn" onclick="showTab('coupons', this)"><i class="fas fa-ticket-percent"></i> My Coupons (<%= (coupons || []).filter(c => c.status === 'active').length %>)</button>
       <button class="tab-btn" onclick="showTab('favorites', this)"><i class="fas fa-heart"></i> Saved Spots (<%= favorites.length %>)</button>
     </div>
 
-    <!-- Bookings Tab -->
     <div id="bookings-tab" class="tab-content active">
       <% if (bookings.length === 0) { %>
       <div class="empty-state">
@@ -30,32 +423,53 @@
       </div>
       <% } else { %>
       <div class="bookings-list">
-        <% bookings.forEach(b => { %>
+        <% bookings.forEach((b) => { %>
         <div class="booking-card status-<%= b.status %>">
           <div class="booking-icon">
-            <% if(b.type==='hotel') { %><i class="fas fa-hotel"></i>
-            <% } else if(b.type==='transport') { %><i class="fas fa-bus"></i>
-            <% } else if(b.type==='guide') { %><i class="fas fa-user-tie"></i>
+            <% if (b.type === 'hotel') { %><i class="fas fa-hotel"></i>
+            <% } else if (b.type === 'transport') { %><i class="fas fa-bus"></i>
+            <% } else if (b.type === 'guide') { %><i class="fas fa-user-tie"></i>
             <% } else { %><i class="fas fa-suitcase"></i><% } %>
           </div>
           <div class="booking-info">
             <h4><%= b.item_name %></h4>
             <p><span class="booking-type"><%= b.type.toUpperCase() %></span></p>
-            <% if(b.check_in) { %><p><i class="fas fa-calendar"></i> <%= b.check_in %><% if(b.check_out) { %> → <%= b.check_out %><% } %></p><% } %>
+            <% if (b.check_in) { %>
+            <p><i class="fas fa-calendar"></i> <%= b.check_in %><% if (b.check_out) { %> to <%= b.check_out %><% } %></p>
+            <% } %>
             <p><i class="fas fa-users"></i> <%= b.persons %> person(s)</p>
+            <p><i class="fas fa-ticket-alt"></i> Ticket No: <%= b.ticket_number %></p>
+            <% if (b.seat_numbers) { %><p><i class="fas fa-chair"></i> Seats: <%= b.seat_numbers %></p><% } %>
             <% if (b.payment_method) { %>
             <p><i class="fas fa-wallet"></i> Payment: <%= b.payment_method.toUpperCase() %> (<%= b.payment_status || 'paid' %>)</p>
+            <% if (b.payment_gateway_ref) { %><p><i class="fas fa-link"></i> Gateway Ref: <%= b.payment_gateway_ref %></p><% } %>
             <% if (b.payment_txn_id) { %><p><i class="fas fa-hashtag"></i> TrxID: <%= b.payment_txn_id %></p><% } %>
+            <% } %>
+            <% if (b.coupon_code) { %>
+            <p><i class="fas fa-ticket-percent"></i> Coupon: <%= b.coupon_code %> (Saved BDT <%= Number(b.coupon_discount || 0).toLocaleString() %>)</p>
+            <% } %>
+            <% if (b.coTravelers && b.coTravelers.length) { %>
+            <div class="co-traveler-preview">
+              <p><i class="fas fa-user-group"></i> Co-Travelers</p>
+              <% b.coTravelers.forEach((traveler, index) => { %>
+              <p class="muted-text">
+                <%= index + 1 %>. <%= traveler.name || 'Unnamed traveler' %>
+                <% if (traveler.relation) { %> - <%= traveler.relation %><% } %>
+                <% if (traveler.phone) { %> - <%= traveler.phone %><% } %>
+              </p>
+              <% }) %>
+            </div>
             <% } %>
           </div>
           <div class="booking-price-status">
-            <div class="booking-price">৳<%= (b.total_price||0).toLocaleString() %></div>
+            <div class="booking-price">BDT <%= (b.total_price || 0).toLocaleString() %></div>
             <span class="status-badge status-<%= b.status %>"><%= b.status %></span>
-            <% if(b.status === 'pending' && !b.exchange_locked) { %>
+            <a href="/bookings/<%= b.id %>/ticket?download=1" class="btn-sm" style="margin-top:8px">Download Ticket</a>
+            <% if ((b.status === 'pending' || b.status === 'confirmed') && !b.exchange_locked) { %>
             <form action="/bookings/<%= b.id %>/cancel" method="POST" style="margin-top:8px">
               <button type="submit" class="btn-danger-sm" onclick="return confirm('Cancel this booking?')">Cancel</button>
             </form>
-            <% } else if (b.status === 'pending' && b.exchange_locked) { %>
+            <% } else if ((b.status === 'pending' || b.status === 'confirmed') && b.exchange_locked) { %>
             <small class="muted-text">Exchanged ticket: user cannot cancel</small>
             <% } %>
           </div>
@@ -65,7 +479,100 @@
       <% } %>
     </div>
 
-    <!-- Favorites Tab -->
+    <div id="coupons-tab" class="tab-content">
+      <% const activeCoupons = (coupons || []).filter(c => c.status === 'active'); %>
+      <% const usedCoupons = (coupons || []).filter(c => c.status === 'used'); %>
+      <% const totalSavings = usedCoupons.reduce((sum, c) => sum + Number(c.max_discount || c.discount_value || 0), 0); %>
+      <div class="coupon-showcase">
+        <div class="coupon-hero">
+          <div class="coupon-hero-grid">
+            <div>
+              <h3>Reward coupons that turn your stories into real travel savings.</h3>
+              <p>Every approved blog post can unlock a coupon you can use while booking hotels, buying transport tickets, hiring guides, or reserving travel packages. Keep an eye on active codes before they expire.</p>
+              <div class="coupon-stat-grid">
+                <div class="coupon-stat">
+                  <strong><%= activeCoupons.length %></strong>
+                  <span>Active coupons</span>
+                </div>
+                <div class="coupon-stat">
+                  <strong><%= usedCoupons.length %></strong>
+                  <span>Used coupons</span>
+                </div>
+                <div class="coupon-stat">
+                  <strong>BDT <%= totalSavings.toLocaleString() %></strong>
+                  <span>Potential max savings tracked</span>
+                </div>
+              </div>
+            </div>
+            <div class="coupon-help">
+              <h4>How to use them</h4>
+              <ul>
+                <li>Copy the coupon code and paste it into the payment gateway before confirming.</li>
+                <li>Each coupon is one-time use and is validated during checkout.</li>
+                <li>Approved blog rewards are perfect for your next trip plan.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <% if (!coupons || coupons.length === 0) { %>
+          <div class="coupon-empty">
+            <i class="fas fa-ticket-percent"></i>
+            <h3>No reward coupons yet</h3>
+            <p>Publish a great travel story and wait for admin approval to earn your first discount code.</p>
+          </div>
+        <% } else { %>
+          <div class="coupon-grid">
+            <% coupons.forEach((c) => { %>
+              <% const cardState = c.status === 'used' ? 'used' : (c.status === 'expired' ? 'expired' : 'active'); %>
+              <div class="coupon-card <%= cardState %>">
+                <div class="coupon-card-top">
+                  <div class="coupon-code-row">
+                    <div class="coupon-code-pill">
+                      <i class="fas fa-ticket"></i>
+                      <span><%= c.code %></span>
+                    </div>
+                    <button type="button" class="coupon-copy-btn" onclick="copyCouponCode('<%= c.code %>', this)">Copy Code</button>
+                  </div>
+                  <span class="status-badge status-<%= c.status %>"><%= c.status %></span>
+                </div>
+
+                <div class="coupon-discount">
+                  <%= c.discount_type === 'fixed' ? ('BDT ' + Number(c.discount_value || 0).toLocaleString()) : (String(c.discount_value || 0) + '%') %>
+                </div>
+                <div class="coupon-caption">
+                  <% if (c.max_discount) { %>
+                    Save up to BDT <%= Number(c.max_discount || 0).toLocaleString() %> on eligible bookings.
+                  <% } else { %>
+                    Reward coupon for your approved travel story.
+                  <% } %>
+                </div>
+
+                <div class="coupon-meta-list">
+                  <div class="coupon-meta-row">
+                    <span>Minimum order</span>
+                    <strong>BDT <%= Number(c.min_order_amount || 0).toLocaleString() %></strong>
+                  </div>
+                  <div class="coupon-meta-row">
+                    <span>Expires</span>
+                    <strong><%= c.expires_at || '-' %></strong>
+                  </div>
+                  <div class="coupon-meta-row">
+                    <span>Used booking</span>
+                    <strong><%= c.used_booking_id ? ('#' + c.used_booking_id) : 'Not used yet' %></strong>
+                  </div>
+                  <div class="coupon-meta-row">
+                    <span>Reward source</span>
+                    <strong><%= c.reward_source === 'blog_post' ? 'Approved blog post' : (c.reward_source || 'Reward') %></strong>
+                  </div>
+                </div>
+              </div>
+            <% }) %>
+          </div>
+        <% } %>
+      </div>
+    </div>
+
     <div id="favorites-tab" class="tab-content">
       <% if (favorites.length === 0) { %>
       <div class="empty-state">
@@ -76,7 +583,7 @@
       </div>
       <% } else { %>
       <div class="cards-grid">
-        <% favorites.forEach(f => { %>
+        <% favorites.forEach((f) => { %>
         <div class="card">
           <div class="card-img">
             <img src="<%= f.image %>" alt="<%= f.name %>" onerror="this.src='/images/placeholder.jpg'"/>
@@ -97,7 +604,6 @@
       <% } %>
     </div>
 
-    <!-- Profile Tab -->
     <div id="profile-tab" class="tab-content">
       <% if (!profile) { %>
       <div class="empty-state">
@@ -156,43 +662,111 @@
       <% } %>
     </div>
 
-    <!-- Wallet Tab -->
     <div id="wallet-tab" class="tab-content">
-      <div class="empty-state" style="max-width:820px; margin:0 auto;">
-        <i class="fas fa-wallet"></i>
-        <h3>My Wallet Balance</h3>
-        <p>Your current wallet balance is</p>
-        <div class="booking-price" style="font-size:1.6rem; margin:12px 0;">BDT <%= (walletBalance || 0).toLocaleString() %></div>
-        <p class="muted-text">Wallet balance is used for bookings and escrow payments.</p>
-
-        <div class="admin-card" style="margin-top:18px;">
-          <div class="admin-card-header">
-            <h3><i class="fas fa-plus-circle"></i> Top Up Wallet</h3>
-          </div>
-          <form action="/wallet/topup" method="POST" class="modal-form">
-            <div class="form-row">
-              <div class="form-group">
-                <label>Gateway</label>
-                <select name="gateway" required class="form-control">
-                  <option value="">Select</option>
-                  <option value="bkash">bKash</option>
-                  <option value="nagad">Nagad</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>Amount (BDT)</label>
-                <input type="number" name="amount" min="10" required class="form-control" placeholder="1000"/>
+      <% const pendingTopups = (walletTopups || []).filter(t => t.status === 'pending').length; %>
+      <% const paidTopups = (walletTopups || []).filter(t => t.status === 'paid'); %>
+      <% const totalTopupValue = paidTopups.reduce((sum, t) => sum + Number(t.amount || 0), 0); %>
+      <div class="wallet-showcase">
+        <div class="wallet-hero">
+          <div class="wallet-hero-grid">
+            <div class="wallet-balance-panel">
+              <h3>Your travel wallet, ready for the next booking.</h3>
+              <p>Use wallet balance for faster checkout across transport tickets, hotel bookings, guide hiring, and package purchases. Top-ups now capture payer number and transaction ID for more realistic payment tracking.</p>
+              <div class="wallet-balance-amount">BDT <%= (walletBalance || 0).toLocaleString() %></div>
+              <div class="wallet-quick-stats">
+                <div class="wallet-stat">
+                  <strong><%= pendingTopups %></strong>
+                  <span>Pending top-ups</span>
+                </div>
+                <div class="wallet-stat">
+                  <strong><%= paidTopups.length %></strong>
+                  <span>Successful top-ups</span>
+                </div>
+                <div class="wallet-stat">
+                  <strong>BDT <%= totalTopupValue.toLocaleString() %></strong>
+                  <span>Total recharge value</span>
+                </div>
               </div>
             </div>
-            <button type="submit" class="btn-primary">Top Up Wallet</button>
-          </form>
-          <p class="muted-text" style="margin-top:10px;">Top-ups are verified automatically via the payment gateway.</p>
+            <div class="wallet-merchant-panel">
+              <h4>Official top-up merchant details</h4>
+              <div class="wallet-merchant-row"><span>bKash Merchant</span><strong id="walletBkashNumber"><%= walletTopupGatewayInfo?.bkash?.merchantNumber || '-' %></strong></div>
+              <div class="wallet-merchant-row"><span>Nagad Merchant</span><strong id="walletNagadNumber"><%= walletTopupGatewayInfo?.nagad?.merchantNumber || '-' %></strong></div>
+              <div class="wallet-merchant-row"><span>Merchant Name</span><strong id="walletMerchantName"><%= walletTopupGatewayInfo?.bkash?.merchantName || 'TouristiX Wallet Recharge' %></strong></div>
+              <div class="wallet-merchant-row"><span>Verification</span><strong><%= walletTopupMode === 'mock' ? 'Instant mock verification' : 'Pending review after submission' %></strong></div>
+            </div>
+          </div>
         </div>
 
-        <div class="admin-card" style="margin-top:18px;">
-          <div class="admin-card-header">
-            <h3><i class="fas fa-list"></i> Recent Wallet Activity</h3>
+        <div class="wallet-layout">
+          <div class="wallet-card">
+            <h3><i class="fas fa-plus-circle"></i> Top Up Wallet</h3>
+            <p>Choose a gateway, send the money to the merchant number, then submit the same mobile number and transaction ID used in the payment.</p>
+            <form action="/wallet/topup" method="POST" class="wallet-topup-form">
+              <div class="wallet-topup-grid">
+                <div class="form-group">
+                  <label>Gateway</label>
+                  <select name="gateway" id="walletGatewaySelect" required class="form-control" onchange="updateWalletGatewayInfo()">
+                    <option value="bkash">bKash</option>
+                    <option value="nagad">Nagad</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Amount (BDT)</label>
+                  <input type="number" name="amount" id="walletAmountInput" min="100" step="50" required class="form-control" placeholder="1000"/>
+                </div>
+              </div>
+              <div class="wallet-amount-chips">
+                <button type="button" class="wallet-chip" onclick="setWalletAmount(500)">BDT 500</button>
+                <button type="button" class="wallet-chip" onclick="setWalletAmount(1000)">BDT 1,000</button>
+                <button type="button" class="wallet-chip" onclick="setWalletAmount(2000)">BDT 2,000</button>
+                <button type="button" class="wallet-chip" onclick="setWalletAmount(5000)">BDT 5,000</button>
+              </div>
+              <div class="wallet-topup-grid">
+                <div class="form-group">
+                  <label>Payer Mobile Number</label>
+                  <input type="text" name="payment_number" required class="form-control" placeholder="01XXXXXXXXX"/>
+                </div>
+                <div class="form-group">
+                  <label>Transaction ID</label>
+                  <input type="text" name="payment_txn_id" required class="form-control" placeholder="e.g. 8A7C91D2"/>
+                </div>
+              </div>
+              <button type="submit" class="btn-primary">Submit Top-Up Request</button>
+            </form>
+            <div class="wallet-hint-list">
+              <div class="wallet-hint-item"><span>Selected merchant</span><strong id="walletSelectedMerchantLabel"><%= walletTopupGatewayInfo?.bkash?.label || 'bKash' %> - <%= walletTopupGatewayInfo?.bkash?.merchantNumber || '-' %></strong></div>
+              <div class="wallet-hint-item"><span>Minimum top-up</span><strong>BDT 100</strong></div>
+              <div class="wallet-hint-item"><span>Current verification mode</span><strong><%= walletTopupMode === 'mock' ? 'Mock auto-approve' : 'Pending verification' %></strong></div>
+            </div>
           </div>
+
+          <div class="wallet-card">
+            <h3><i class="fas fa-clock-rotate-left"></i> Recent Top-Up Requests</h3>
+            <p>Track whether your submissions are pending or already credited to your wallet.</p>
+            <% if (!walletTopups || walletTopups.length === 0) { %>
+              <p class="muted-text">No wallet top-up request found yet.</p>
+            <% } else { %>
+              <div class="wallet-topup-list">
+                <% walletTopups.forEach((topup) => { %>
+                  <div class="wallet-topup-item">
+                    <div class="wallet-topup-head">
+                      <strong><%= String(topup.gateway || '').toUpperCase() %> - BDT <%= Number(topup.amount || 0).toLocaleString() %></strong>
+                      <span class="status-badge status-<%= topup.status %>"><%= topup.status %></span>
+                    </div>
+                    <div class="wallet-topup-meta">Reference: <%= topup.gateway_ref || '-' %></div>
+                    <div class="wallet-topup-meta">Payer: <%= topup.payment_number || '-' %> | TrxID: <%= topup.payment_txn_id || '-' %></div>
+                    <div class="wallet-topup-meta">Created: <%= topup.created_at %><% if (topup.paid_at) { %> | Credited: <%= topup.paid_at %><% } %></div>
+                  </div>
+                <% }) %>
+              </div>
+            <% } %>
+          </div>
+        </div>
+
+        <div class="wallet-card">
+          <h3><i class="fas fa-list"></i> Recent Wallet Activity</h3>
+          <p>Every top-up, booking debit, refund, payout, and fee movement appears here.</p>
           <% if (!walletTx || walletTx.length === 0) { %>
             <p class="muted-text">No wallet transactions yet.</p>
           <% } else { %>
@@ -223,11 +797,62 @@
 
 <script>
 function showTab(name, tabBtn) {
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById(name+'-tab').classList.add('active');
+  document.querySelectorAll('.tab-content').forEach((t) => t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+  document.getElementById(name + '-tab').classList.add('active');
   tabBtn.classList.add('active');
 }
+
+async function copyCouponCode(code, button) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(code);
+    } else {
+      const temp = document.createElement('input');
+      temp.value = code;
+      document.body.appendChild(temp);
+      temp.select();
+      document.execCommand('copy');
+      document.body.removeChild(temp);
+    }
+    const original = button.textContent;
+    button.textContent = 'Copied';
+    setTimeout(() => {
+      button.textContent = original;
+    }, 1400);
+  } catch (err) {
+    alert('Could not copy coupon code. Please copy it manually.');
+  }
+}
+
+const walletGatewayInfo = {
+  bkash: {
+    label: '<%= walletTopupGatewayInfo?.bkash?.label || 'bKash' %>',
+    merchantName: '<%= walletTopupGatewayInfo?.bkash?.merchantName || 'TouristiX Wallet Recharge' %>',
+    merchantNumber: '<%= walletTopupGatewayInfo?.bkash?.merchantNumber || '' %>'
+  },
+  nagad: {
+    label: '<%= walletTopupGatewayInfo?.nagad?.label || 'Nagad' %>',
+    merchantName: '<%= walletTopupGatewayInfo?.nagad?.merchantName || 'TouristiX Wallet Recharge' %>',
+    merchantNumber: '<%= walletTopupGatewayInfo?.nagad?.merchantNumber || '' %>'
+  }
+};
+
+function setWalletAmount(amount) {
+  const input = document.getElementById('walletAmountInput');
+  if (input) input.value = amount;
+}
+
+function updateWalletGatewayInfo() {
+  const select = document.getElementById('walletGatewaySelect');
+  const info = walletGatewayInfo[(select && select.value) || 'bkash'] || walletGatewayInfo.bkash;
+  const merchantName = document.getElementById('walletMerchantName');
+  const selectedLabel = document.getElementById('walletSelectedMerchantLabel');
+  if (merchantName) merchantName.textContent = info.merchantName;
+  if (selectedLabel) selectedLabel.textContent = `${info.label} - ${info.merchantNumber}`;
+}
+
+document.addEventListener('DOMContentLoaded', updateWalletGatewayInfo);
 </script>
 
 <%- include('../partials/footer') %>

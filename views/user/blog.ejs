@@ -10,84 +10,307 @@
 <style>
 .blog-page {
   display: grid;
+  gap: 24px;
+}
+.blog-hero {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top right, rgba(251, 191, 36, 0.28), transparent 32%),
+    linear-gradient(135deg, #0f766e, #155e75 58%, #1d4ed8);
+  color: #fff;
+  border-radius: 28px;
+  padding: 28px;
+  box-shadow: 0 24px 50px rgba(15, 23, 42, 0.16);
+}
+.blog-hero::after {
+  content: '';
+  position: absolute;
+  inset: auto -40px -60px auto;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+}
+.blog-hero-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1.4fr 0.9fr;
   gap: 20px;
+  align-items: stretch;
+}
+.blog-hero-copy h2 {
+  margin: 0 0 10px;
+  font-size: clamp(2rem, 3vw, 2.8rem);
+  line-height: 1.05;
+}
+.blog-hero-copy p {
+  margin: 0;
+  max-width: 640px;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.7;
+}
+.blog-hero-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 22px;
+}
+.blog-stat {
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+  padding: 14px;
+  backdrop-filter: blur(10px);
+}
+.blog-stat strong {
+  display: block;
+  font-size: 1.35rem;
+  margin-bottom: 4px;
+}
+.blog-stat span {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.78);
+}
+.blog-hero-panel {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 24px;
+  padding: 22px;
+  backdrop-filter: blur(12px);
+}
+.blog-hero-panel h3 {
+  margin: 0 0 12px;
+  font-size: 1.1rem;
+}
+.blog-hero-panel ul {
+  margin: 0;
+  padding-left: 18px;
+  color: rgba(255, 255, 255, 0.88);
+  line-height: 1.8;
+}
+.blog-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.blog-sidebar {
+  display: grid;
+  gap: 18px;
+  position: sticky;
+  top: 88px;
 }
 .blog-form-card {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 16px;
-  padding: 18px;
-  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.05);
+  background: linear-gradient(180deg, #ffffff, #f8fbff);
+  border: 1px solid #dbe7f3;
+  border-radius: 24px;
+  padding: 22px;
+  box-shadow: 0 18px 34px rgba(15, 23, 42, 0.08);
 }
 .blog-form-card h3 {
-  margin-top: 0;
+  margin: 0 0 8px;
+  font-size: 1.35rem;
+}
+.blog-form-card p {
+  margin: 0 0 16px;
+  color: #475569;
+}
+.blog-form-card .review-form {
+  display: grid;
+  gap: 12px;
+}
+.blog-form-card textarea,
+.blog-form-card .form-control {
+  border-radius: 14px;
+}
+.blog-helper-card {
+  background: #fffdf7;
+  border: 1px solid #f3e8c8;
+  border-radius: 22px;
+  padding: 18px;
+  box-shadow: 0 12px 26px rgba(148, 163, 184, 0.08);
+}
+.blog-helper-card h4 {
+  margin: 0 0 10px;
+  font-size: 1rem;
+  color: #1e293b;
+}
+.blog-helper-card p,
+.blog-helper-card li {
+  color: #5b6472;
+  line-height: 1.7;
+}
+.blog-helper-card ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.blog-feed-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+}
+.blog-feed-head h3 {
+  margin: 0;
+  font-size: 1.45rem;
+}
+.blog-feed-head p {
+  margin: 6px 0 0;
+  color: #64748b;
 }
 .blog-feed {
   display: grid;
-  gap: 18px;
+  gap: 20px;
 }
 .blog-card {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.98));
+  border: 1px solid #dbe4f0;
+  border-radius: 24px;
   overflow: hidden;
-  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.05);
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.08);
 }
 .blog-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px;
+  padding: 18px 20px 12px;
 }
 .blog-author {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 .blog-avatar {
-  width: 38px;
-  height: 38px;
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
   object-fit: cover;
-  border: 2px solid var(--primary-light);
+  border: 3px solid #d9f99d;
 }
-.blog-title {
-  padding: 0 16px;
-  font-size: 1.2rem;
-  font-weight: 800;
+.blog-author-meta strong {
   color: #0f172a;
 }
+.blog-badge {
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: #ecfeff;
+  color: #155e75;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.blog-title {
+  padding: 0 20px;
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.3;
+}
 .blog-content {
-  padding: 8px 16px 16px;
+  padding: 12px 20px 18px;
   color: #334155;
-  line-height: 1.6;
+  line-height: 1.8;
+  font-size: 1rem;
 }
 .blog-media {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 10px;
-  padding: 0 16px 16px;
+  gap: 12px;
+  padding: 0 20px 20px;
 }
 .blog-media img,
 .blog-media video {
   width: 100%;
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 18px;
+  border: 1px solid #dbe4f0;
 }
 .blog-meta {
   color: #64748b;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
 }
 .login-prompt {
-  background: #f8fafc;
-  border: 1px dashed #cbd5f5;
-  padding: 16px;
-  border-radius: 14px;
+  background: linear-gradient(180deg, #fff, #f8fafc);
+  border: 1px dashed #b6c8ea;
+  padding: 18px;
+  border-radius: 22px;
+}
+.empty-state.blog-empty {
+  background: linear-gradient(180deg, #fff, #f8fafc);
+  border: 1px solid #dbe4f0;
+  border-radius: 24px;
+  padding: 44px 24px;
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.06);
+}
+@media (max-width: 980px) {
+  .blog-hero-grid,
+  .blog-layout {
+    grid-template-columns: 1fr;
+  }
+  .blog-sidebar {
+    position: static;
+  }
+}
+@media (max-width: 640px) {
+  .blog-hero {
+    padding: 22px 18px;
+    border-radius: 24px;
+  }
+  .blog-hero-stats {
+    grid-template-columns: 1fr;
+  }
+  .blog-card-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .blog-title,
+  .blog-content,
+  .blog-media,
+  .blog-card-header {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
 }
 </style>
 
 <section class="section">
   <div class="container blog-page">
+    <div class="blog-hero">
+      <div class="blog-hero-grid">
+        <div class="blog-hero-copy">
+          <h2>Stories from roads, rivers, hills, and hidden corners of Bangladesh.</h2>
+          <p>Discover real travel experiences, practical tips, and memorable moments shared by explorers across the country. This space is built for vivid stories, useful advice, and the kind of local detail that makes a trip unforgettable.</p>
+          <div class="blog-hero-stats">
+            <div class="blog-stat">
+              <strong><%= posts.length %></strong>
+              <span>Published stories</span>
+            </div>
+            <div class="blog-stat">
+              <strong><%= new Set((posts || []).map(p => p.user_id)).size %></strong>
+              <span>Storytellers</span>
+            </div>
+            <div class="blog-stat">
+              <strong><%= locals.user ? '1 click' : 'Login' %></strong>
+              <span><%= locals.user ? 'to share your own post' : 'to start posting' %></span>
+            </div>
+          </div>
+        </div>
+        <div class="blog-hero-panel">
+          <h3>What makes a great travel post?</h3>
+          <ul>
+            <li>Share a route, hidden spot, or local tip that helped your journey.</li>
+            <li>Add a few photos or short clips to bring the experience to life.</li>
+            <li>Write in your own voice so others can feel the place through your story.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
     <% if (locals.success_msg && success_msg.length) { %>
       <div class="alert alert-success"><%= success_msg[0] %></div>
     <% } %>
@@ -95,27 +318,47 @@
       <div class="alert alert-danger"><%= error_msg[0] %></div>
     <% } %>
 
-    <% if (locals.user) { %>
-      <div class="blog-form-card">
-        <h3>Write Your Travel Story</h3>
-        <form action="/blog" method="POST" enctype="multipart/form-data" class="review-form">
-          <input type="text" name="title" placeholder="Title of your journey" class="form-control" required />
-          <textarea name="content" placeholder="Share your travel experience..." rows="6" required></textarea>
-          <input type="file" name="media" accept=".jpg,.jpeg,.png,.webp,.mp4,.webm,.mov" multiple class="review-photo-input"/>
-          <button type="submit" class="btn-primary">Publish Blog</button>
-        </form>
-        <small class="muted-text">You can upload photos or short videos (max 10 files).</small>
-      </div>
-    <% } else { %>
-      <div class="login-prompt">
-        <p><strong>Want to share your travel story?</strong></p>
-        <p>Please <a href="/auth/login">login</a> to publish a blog post.</p>
-      </div>
-    <% } %>
+    <div class="blog-layout">
+      <div class="blog-sidebar">
+        <% if (locals.user) { %>
+          <div class="blog-form-card">
+            <h3>Write Your Travel Story</h3>
+            <p>Turn a trip into something worth revisiting. Add a strong title, a useful story, and a few visuals.</p>
+            <form action="/blog" method="POST" enctype="multipart/form-data" class="review-form">
+              <input type="text" name="title" placeholder="Title of your journey" class="form-control" required />
+              <textarea name="content" placeholder="Share your travel experience..." rows="7" required></textarea>
+              <input type="file" name="media" accept=".jpg,.jpeg,.png,.webp,.mp4,.webm,.mov" multiple class="review-photo-input"/>
+              <button type="submit" class="btn-primary">Publish Blog</button>
+            </form>
+            <small class="muted-text">You can upload photos or short videos, up to 10 files per post. After publishing, the post goes to admin approval. Once approved, it appears in the blog and you receive a reward coupon.</small>
+          </div>
+        <% } else { %>
+          <div class="login-prompt">
+            <p><strong>Want to share your travel story?</strong></p>
+            <p>Please <a href="/auth/login">login</a> to publish a blog post.</p>
+          </div>
+        <% } %>
 
-    <div class="blog-feed">
+        <div class="blog-helper-card">
+          <h4>Quick ideas to write about</h4>
+          <ul>
+            <li>Your favorite district, beach, hill, or food stop.</li>
+            <li>A route guide with timing, transport tips, or budget notes.</li>
+            <li>A photo diary from a weekend trip or festival visit.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="blog-feed">
+        <div class="blog-feed-head">
+          <div>
+            <h3>Community Stories</h3>
+            <p>Fresh posts from travelers sharing real experiences and useful discoveries.</p>
+          </div>
+        </div>
+
       <% if (!posts.length) { %>
-        <div class="empty-state">
+        <div class="empty-state blog-empty">
           <i class="fas fa-pen"></i>
           <h3>No blog posts yet</h3>
           <p>Be the first to share a travel story.</p>
@@ -130,11 +373,12 @@
                 <% } else { %>
                   <div class="review-avatar"><%= (p.author_name || 'U').charAt(0).toUpperCase() %></div>
                 <% } %>
-                <div>
+                <div class="blog-author-meta">
                   <strong><%= p.author_name %></strong>
                   <div class="blog-meta"><%= new Date(p.created_at).toLocaleString() %></div>
                 </div>
               </div>
+              <div class="blog-badge">Travel Story</div>
             </div>
             <div class="blog-title"><%= p.title %></div>
             <div class="blog-content"><%= p.content %></div>
@@ -153,6 +397,7 @@
           </div>
         <% }) %>
       <% } %>
+      </div>
     </div>
   </div>
 </section>

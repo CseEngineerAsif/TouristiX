@@ -92,10 +92,11 @@
       <h3>Hire Guide</h3>
       <button onclick="document.getElementById('guideModal').style.display='none'" class="modal-close">&times;</button>
     </div>
-    <form action="/book/guide" method="POST" class="modal-form js-payment-form">
+    <form action="/book/guide" method="POST" class="modal-form js-payment-form" data-booking-kind="guide">
       <input type="hidden" name="guide_id" id="g_id"/>
       <input type="hidden" name="guide_name" id="g_name_hidden"/>
       <input type="hidden" name="total_price" id="g_total"/>
+      <input type="hidden" name="traveler_count" value="1"/>
       <input type="hidden" name="return_to" value="<%= returnTo || '' %>"/>
       <div class="form-group">
         <label>Guide</label>
@@ -135,5 +136,6 @@ function calcGuidePrice() {
 }
 </script>
 
+<%- include('../partials/payment-modal') %>
 <%- include('../partials/footer') %>
 

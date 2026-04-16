@@ -332,11 +332,12 @@ button[disabled] { opacity: 0.55; cursor: not-allowed; }
 .form-control:focus { border-color: var(--primary); }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .price-display { background: var(--primary-light); color: var(--primary-dark); padding: 12px 16px; border-radius: 8px; font-size: 0.875rem; margin-bottom: 16px; text-align: center; }
-.payment-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
+.payment-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 8px; }
 .payment-option { border: 1px solid var(--border); border-radius: 10px; padding: 14px; cursor: pointer; background: var(--white); text-align: left; transition: all 0.2s; }
 .payment-option:hover { border-color: var(--primary); box-shadow: var(--shadow); }
 .payment-option .payment-name { display: block; font-size: 1rem; font-weight: 800; }
 .payment-option small { color: var(--text-muted); font-size: 0.78rem; }
+.payment-wallet .payment-name { color: #0f766e; }
 .payment-bkash .payment-name { color: #e2136e; }
 .payment-nagad .payment-name { color: #f97316; }
 .payment-modal-box { max-width: 560px; }
@@ -345,11 +346,32 @@ button[disabled] { opacity: 0.55; cursor: not-allowed; }
 .gateway-summary small { color: var(--text-muted); display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
 .gateway-summary strong { font-size: 0.95rem; }
 .gateway-amount strong { color: var(--primary-dark); font-size: 1.15rem; }
+.booking-context-card { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; background: #ffffff; }
+.booking-context-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.booking-context-head small { color: var(--text-muted); display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.booking-context-rows { display: grid; gap: 8px; }
 .payment-option.selected { border-color: var(--primary); background: var(--primary-light); box-shadow: var(--shadow); }
 .gateway-instructions { border: 1px dashed #cbd5e1; border-radius: 10px; padding: 10px 12px; margin-bottom: 14px; background: #fcfdff; }
 .gateway-instructions h4 { font-size: 0.9rem; margin-bottom: 6px; }
 .gateway-instructions ol { margin-left: 18px; color: var(--text-muted); font-size: 0.82rem; display: grid; gap: 4px; }
 .gateway-note { margin-bottom: 14px; display: block; }
+.payment-step { display: none; }
+.payment-step.active { display: block; }
+.payment-step-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 12px; }
+.merchant-card { background: white; border: 1px solid #dbe4f0; border-radius: 12px; padding: 12px; display: grid; gap: 8px; }
+.merchant-row { display: flex; justify-content: space-between; gap: 12px; font-size: 0.9rem; }
+.merchant-row span { color: var(--text-muted); }
+.co-traveler-section { margin: 14px 0; border: 1px solid var(--border); border-radius: 12px; padding: 14px; background: #fbfdff; }
+.co-traveler-header { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
+.co-traveler-header h4 { margin: 0 0 4px; font-size: 0.95rem; }
+.co-traveler-count { min-width: 34px; height: 34px; border-radius: 999px; background: var(--primary-light); color: var(--primary); display: inline-flex; align-items: center; justify-content: center; font-weight: 800; }
+.co-traveler-fields { display: grid; gap: 12px; }
+.co-traveler-card { border: 1px solid #dbe4f0; border-radius: 12px; padding: 12px; background: white; }
+.co-traveler-card-title { font-weight: 700; margin-bottom: 10px; }
+.co-traveler-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.co-traveler-wide { grid-column: 1 / -1; }
+.co-traveler-preview { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #dbe4f0; }
+.co-traveler-preview p { margin-bottom: 4px; }
 
 /* ===== FEATURES GRID ===== */
 .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 32px; }
@@ -432,6 +454,8 @@ button[disabled] { opacity: 0.55; cursor: not-allowed; }
   .form-row { grid-template-columns: 1fr; }
   .payment-options { grid-template-columns: 1fr; }
   .gateway-summary { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .payment-step-actions { flex-direction: column; }
+  .co-traveler-grid { grid-template-columns: 1fr; }
   .auth-container { grid-template-columns: 1fr; }
   .auth-left { display: none; }
   .footer-container { grid-template-columns: 1fr 1fr; gap: 24px; }

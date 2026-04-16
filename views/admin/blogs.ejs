@@ -1,0 +1,73 @@
+<%- include('./partials/admin-header') %>
+<% if (locals.success_msg && success_msg.length) { %>
+<div class="alert alert-success"><%= success_msg[0] %></div>
+<% } %>
+<% if (locals.error_msg && error_msg.length) { %>
+<div class="alert alert-danger"><%= error_msg[0] %></div>
+<% } %>
+
+<div class="admin-card">
+  <div class="admin-card-header">
+    <h3><i class="fas fa-pen-to-square"></i> Blog Approval Queue (<%= (posts || []).length %>)</h3>
+  </div>
+  <div class="table-responsive">
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Author</th>
+          <th>Post</th>
+          <th>Status</th>
+          <th>Coupon</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% if (!posts || posts.length === 0) { %>
+          <tr><td colspan="6" class="text-center">No blog posts found.</td></tr>
+        <% } %>
+        <% (posts || []).forEach((post, index) => { %>
+          <tr>
+            <td><%= index + 1 %></td>
+            <td>
+              <strong><%= post.author_name %></strong><br/>
+              <small><%= post.author_email %></small>
+            </td>
+            <td style="min-width:320px;">
+              <strong><%= post.title %></strong><br/>
+              <small><%= (post.content || '').slice(0, 180) %><%= (post.content || '').length > 180 ? '...' : '' %></small>
+              <br/><small>Created: <%= post.created_at %></small>
+            </td>
+            <td>
+              <span class="status-badge status-<%= post.status %>"><%= post.status %></span>
+              <% if (post.rejection_note) { %><br/><small><%= post.rejection_note %></small><% } %>
+            </td>
+            <td>
+              <% if (post.reward_coupon_code) { %>
+                <strong><%= post.reward_coupon_code %></strong><br/>
+                <small>10% off up to BDT 500</small>
+              <% } else { %>
+                <small>-</small>
+              <% } %>
+            </td>
+            <td style="min-width:220px;">
+              <% if (post.status === 'pending') { %>
+                <form action="/admin/blogs/<%= post.id %>/approve" method="POST" style="margin-bottom:8px;">
+                  <button type="submit" class="btn-sm">Approve & Generate Coupon</button>
+                </form>
+                <form action="/admin/blogs/<%= post.id %>/reject" method="POST">
+                  <input type="text" name="rejection_note" class="form-control" placeholder="Reason (optional)" style="margin-bottom:8px;"/>
+                  <button type="submit" class="btn-danger-sm">Reject</button>
+                </form>
+              <% } else { %>
+                <small>No pending action</small>
+              <% } %>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<%- include('./partials/admin-footer') %>

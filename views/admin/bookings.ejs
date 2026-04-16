@@ -32,6 +32,7 @@
               <br/>
               <small><%= b.payment_status || 'paid' %></small>
               <% if (b.escrow_status) { %><br/><small>Escrow: <%= b.escrow_status %></small><% } %>
+              <% if (b.payment_gateway_ref) { %><br/><small>Gateway Ref: <%= b.payment_gateway_ref %></small><% } %>
               <% if (b.payment_txn_id) { %><br/><small>TrxID: <%= b.payment_txn_id %></small><% } %>
               <% if (b.payment_number) { %><br/><small>From: <%= b.payment_number %></small><% } %>
             <% } else { %>
@@ -42,7 +43,7 @@
           <td>
             <form action="/admin/bookings/<%= b.id %>/status" method="POST">
               <select name="status" onchange="this.form.submit()" class="status-select">
-                <% ['pending','confirmed','completed','cancelled','released'].forEach(s => { %>
+                <% ['pending','confirmed','completed','cancelled'].forEach(s => { %>
                 <option value="<%= s %>" <%= b.status===s?'selected':'' %>><%= s %></option>
                 <% }) %>
               </select>

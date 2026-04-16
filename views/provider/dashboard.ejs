@@ -1,9 +1,532 @@
 <%- include('../partials/header') %>
 
-<section class="dashboard">
-  <div class="dashboard-header">
-    <h2><i class="fas fa-briefcase"></i> Partner Dashboard</h2>
-    <p class="muted-text">Manage your listings and confirm completed services.</p>
+<%
+  const allBookings = bookings || [];
+  const allItems = items || [];
+  const totalBookings = allBookings.length;
+  const activeBookings = allBookings.filter(b => b.status !== 'cancelled' && b.status !== 'completed').length;
+  const completedBookings = allBookings.filter(b => b.status === 'completed').length;
+  const pendingBookings = allBookings.filter(b => b.status === 'pending').length;
+  const totalProjectedPayout = allBookings.reduce((sum, b) => (
+    sum + (String(b.escrow_status || '').toLowerCase() === 'refunded'
+      ? 0
+      : Math.max(0, Number(b.total_price || 0) - Number(b.provider_commission_amount || 0)))
+  ), 0);
+
+  function providerLabel(type) {
+    if (type === 'hotel') return 'Hotel Partner';
+    if (type === 'transport') return 'Transport Partner';
+    if (type === 'guide') return 'Guide Partner';
+    if (type === 'package') return 'Package Partner';
+    return 'Partner';
+  }
+
+  function prettyStatus(status) {
+    const value = String(status || 'unknown');
+    return value.charAt(0).toUpperCase() + value.slice(1);
+  }
+%>
+
+<style>
+.partner-shell {
+  display: grid;
+  gap: 22px;
+  padding: 18px 0 28px;
+  background:
+    radial-gradient(circle at top left, rgba(14, 165, 233, 0.08), transparent 22%),
+    radial-gradient(circle at top right, rgba(34, 197, 94, 0.08), transparent 18%);
+}
+.partner-topbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(260px, 0.8fr);
+  gap: 18px;
+  align-items: stretch;
+}
+.partner-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #fff7ed, #ffedd5);
+  border: 1px solid #fed7aa;
+  color: #9a3412;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+.partner-intro {
+  background:
+    radial-gradient(circle at top left, rgba(253, 186, 116, 0.18), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(56, 189, 248, 0.16), transparent 24%),
+    linear-gradient(135deg, #fffdf7, #f6fbff 58%, #f0fdf4);
+  border: 1px solid #d9e7f2;
+  border-radius: 28px;
+  padding: 24px 26px;
+  box-shadow: 0 22px 44px rgba(15, 23, 42, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+.partner-intro::after {
+  content: '';
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  right: -60px;
+  top: -70px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.58);
+}
+.partner-intro h2 {
+  position: relative;
+  margin: 14px 0 8px;
+  font-size: clamp(1.8rem, 3vw, 2.6rem);
+  color: #102a43;
+  line-height: 1.08;
+}
+.partner-intro p {
+  position: relative;
+  margin: 0;
+  max-width: 640px;
+  color: #5f7384;
+  line-height: 1.7;
+}
+.partner-top-summary {
+  background:
+    radial-gradient(circle at top right, rgba(34, 197, 94, 0.14), transparent 28%),
+    linear-gradient(135deg, #0f766e, #14532d 70%, #134e4a);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 28px;
+  padding: 22px;
+  box-shadow: 0 24px 48px rgba(20, 83, 45, 0.22);
+  display: grid;
+  gap: 16px;
+  color: #fff;
+}
+.summary-label {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.9rem;
+}
+.summary-value {
+  font-size: 2rem;
+  line-height: 1;
+  color: #fff;
+  font-weight: 800;
+}
+.summary-inline {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.summary-chip {
+  border-radius: 18px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(10px);
+}
+.summary-chip span {
+  display: block;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.82rem;
+  margin-bottom: 6px;
+}
+.summary-chip strong {
+  color: #fff;
+}
+.partner-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.partner-stat {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, #ffffff, #fbfdff);
+  border: 1px solid #d9e7f2;
+  border-radius: 24px;
+  padding: 18px 18px 18px 22px;
+  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.06);
+}
+.partner-stat::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 6px;
+}
+.partner-stats .partner-stat:nth-child(1)::before {
+  background: linear-gradient(180deg, #0ea5e9, #38bdf8);
+}
+.partner-stats .partner-stat:nth-child(2)::before {
+  background: linear-gradient(180deg, #10b981, #34d399);
+}
+.partner-stats .partner-stat:nth-child(3)::before {
+  background: linear-gradient(180deg, #f59e0b, #fbbf24);
+}
+.partner-stats .partner-stat:nth-child(4)::before {
+  background: linear-gradient(180deg, #8b5cf6, #a78bfa);
+}
+.partner-stat .label {
+  color: #5b7083;
+  font-size: 0.9rem;
+}
+.partner-stat strong {
+  display: block;
+  margin-top: 10px;
+  font-size: 1.8rem;
+  color: #102a43;
+}
+.partner-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+.panel-card {
+  background: linear-gradient(180deg, #ffffff, #fbfdff);
+  border: 1px solid #dce8f3;
+  border-radius: 28px;
+  padding: 22px;
+  box-shadow: 0 20px 44px rgba(15, 23, 42, 0.05);
+}
+.panel-card h3 {
+  margin: 0 0 8px;
+  color: #102a43;
+}
+.panel-card p {
+  margin: 0;
+}
+.listing-stack,
+.booking-stack {
+  display: grid;
+  gap: 16px;
+}
+.listing-item {
+  border: 1px solid #d8e6f2;
+  border-radius: 20px;
+  padding: 14px 16px;
+  background:
+    linear-gradient(180deg, #ffffff, #f9fcff);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+.listing-item strong {
+  display: block;
+  color: #102a43;
+}
+.listing-meta {
+  margin-top: 8px;
+  color: #66788a;
+  font-size: 0.9rem;
+}
+.empty-state {
+  border: 1px dashed #bfd0ea;
+  border-radius: 20px;
+  padding: 28px 18px;
+  text-align: center;
+  color: #66788a;
+  background: #fbfdff;
+}
+.booking-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.booking-head p {
+  color: #66788a;
+}
+.booking-head h3 {
+  font-size: 1.35rem;
+}
+.booking-card {
+  border: 1px solid #d9e6f2;
+  border-radius: 24px;
+  padding: 20px;
+  background:
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.11), transparent 24%),
+    radial-gradient(circle at bottom left, rgba(250, 204, 21, 0.1), transparent 24%),
+    linear-gradient(180deg, #ffffff, #fbfdff);
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.05);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.booking-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 22px 42px rgba(15, 23, 42, 0.08);
+  border-color: #c9dff1;
+}
+.booking-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: start;
+}
+.booking-title {
+  margin: 0 0 6px;
+  color: #102a43;
+  font-size: 1.1rem;
+}
+.booking-subtitle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  color: #66788a;
+  font-size: 0.92rem;
+}
+.booking-subtitle span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.soft-pill,
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 7px 11px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.soft-pill {
+  background: #eef7ff;
+  border: 1px solid #d4e5f5;
+  color: #21506b;
+}
+.status-badge.status-pending {
+  background: #fff7d6;
+  color: #8a6700;
+}
+.status-badge.status-confirmed {
+  background: #dcfce7;
+  color: #166534;
+}
+.status-badge.status-completed {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+.status-badge.status-cancelled {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.booking-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.metric-box {
+  background: linear-gradient(180deg, #f8fbfe, #ffffff);
+  border: 1px solid #dfe9f2;
+  border-radius: 18px;
+  padding: 12px;
+  position: relative;
+  overflow: hidden;
+}
+.metric-box::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 3px;
+  background: linear-gradient(90deg, #38bdf8, #10b981);
+  opacity: 0.7;
+}
+.metric-box span {
+  display: block;
+  color: #6b7f90;
+  font-size: 0.82rem;
+  margin-bottom: 6px;
+}
+.metric-box strong {
+  color: #102a43;
+}
+.booking-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 12px;
+  margin-top: 16px;
+  align-items: center;
+}
+.text-button {
+  border: 1px solid #c7dcef;
+  background: linear-gradient(180deg, #ffffff, #eef7ff);
+  color: #164e63;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 10px 18px rgba(14, 116, 144, 0.08);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+.text-button:hover {
+  background: #eaf5ff;
+  transform: translateY(-1px);
+  box-shadow: 0 14px 24px rgba(14, 116, 144, 0.12);
+}
+.details-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.detail-cell {
+  background: linear-gradient(180deg, #f8fbfe, #ffffff);
+  border: 1px solid #dfeaf3;
+  border-radius: 14px;
+  padding: 12px;
+}
+.detail-cell span {
+  display: block;
+  margin-bottom: 6px;
+  color: #6b7f90;
+  font-size: 0.82rem;
+}
+.traveler-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+.traveler-chip {
+  border: 1px solid #dce8f3;
+  border-radius: 14px;
+  padding: 12px;
+  background: linear-gradient(180deg, #ffffff, #fbfdff);
+}
+.traveler-chip strong {
+  display: block;
+  color: #102a43;
+  margin-bottom: 6px;
+}
+.traveler-chip small {
+  color: #66788a;
+}
+.customer-modal {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.58);
+  backdrop-filter: blur(5px);
+  z-index: 1000;
+}
+.customer-modal.open {
+  display: flex;
+}
+.customer-modal-card {
+  width: min(760px, 100%);
+  max-height: 88vh;
+  overflow: auto;
+  background:
+    radial-gradient(circle at top right, rgba(56, 189, 248, 0.1), transparent 22%),
+    linear-gradient(180deg, #ffffff, #f8fbff);
+  border: 1px solid #d9e6f2;
+  border-radius: 26px;
+  box-shadow: 0 28px 60px rgba(15, 23, 42, 0.22);
+  padding: 24px;
+}
+.customer-modal-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.customer-modal-head h4 {
+  margin: 0 0 6px;
+  color: #102a43;
+  font-size: 1.3rem;
+}
+.customer-modal-head p {
+  margin: 0;
+  color: #66788a;
+}
+.modal-close {
+  width: 42px;
+  height: 42px;
+  border: 1px solid #cbd9e8;
+  border-radius: 50%;
+  background: #fff;
+  color: #102a43;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+.modal-close:hover {
+  background: #f8fbfe;
+}
+.alert {
+  border-radius: 16px;
+}
+@media (max-width: 1080px) {
+  .partner-topbar,
+  .partner-grid {
+    grid-template-columns: 1fr;
+  }
+  .partner-stats,
+  .booking-metrics,
+  .details-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 700px) {
+  .partner-intro,
+  .partner-top-summary,
+  .panel-card,
+  .booking-card {
+    padding: 18px;
+    border-radius: 20px;
+  }
+  .partner-stats,
+  .booking-metrics,
+  .details-grid {
+    grid-template-columns: 1fr;
+  }
+  .booking-card-top,
+  .booking-actions,
+  .booking-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .text-button {
+    width: 100%;
+  }
+  .customer-modal-card {
+    padding: 18px;
+    border-radius: 20px;
+  }
+}
+</style>
+
+<section class="partner-shell">
+  <div class="partner-topbar">
+    <div class="partner-intro">
+        <span class="partner-kicker"><i class="fas fa-briefcase"></i> <%= providerLabel(providerType) %></span>
+        <h2>Partner Dashboard</h2>
+        <p>Review bookings, track instantly-settled payout numbers, and open customer information from a simpler and more polished workspace.</p>
+    </div>
+    <div class="partner-top-summary">
+      <div>
+        <div class="summary-label">Paid or expected payout</div>
+        <div class="summary-value">BDT <%= totalProjectedPayout.toLocaleString() %></div>
+      </div>
+      <div class="summary-inline">
+        <div class="summary-chip">
+          <span>Listings</span>
+          <strong><%= allItems.length %></strong>
+        </div>
+        <div class="summary-chip">
+          <span>Customers</span>
+          <strong><%= totalBookings %></strong>
+        </div>
+      </div>
+    </div>
   </div>
 
   <% if (locals.success_msg && success_msg.length) { %>
@@ -13,69 +536,208 @@
     <div class="alert alert-danger"><%= error_msg[0] %></div>
   <% } %>
 
-  <div class="dashboard-grid">
-    <div class="dashboard-card">
-      <h3><i class="fas fa-store"></i> My Listings</h3>
-      <% if (!items || items.length === 0) { %>
-        <p class="muted-text">No listings assigned yet. Please contact admin to assign your listings.</p>
-      <% } else { %>
-        <ul class="simple-list">
-          <% items.forEach(item => { %>
-            <li>
-              <strong><%= item.name || item.company || item.type %></strong>
-              <span class="muted-text">ID: <%= item.id %></span>
-            </li>
-          <% }) %>
-        </ul>
-      <% } %>
+  <div class="partner-stats">
+    <div class="partner-stat">
+      <div class="label">Total bookings</div>
+      <strong><%= totalBookings %></strong>
     </div>
+    <div class="partner-stat">
+      <div class="label">Active now</div>
+      <strong><%= activeBookings %></strong>
+    </div>
+    <div class="partner-stat">
+      <div class="label">Pending review</div>
+      <strong><%= pendingBookings %></strong>
+    </div>
+    <div class="partner-stat">
+      <div class="label">Completed</div>
+      <strong><%= completedBookings %></strong>
+    </div>
+  </div>
 
-    <div class="dashboard-card">
-      <h3><i class="fas fa-calendar-check"></i> Bookings</h3>
-      <% if (!bookings || bookings.length === 0) { %>
-        <p class="muted-text">No bookings yet.</p>
+  <div class="partner-grid">
+    <aside class="panel-card">
+      <h3><i class="fas fa-store"></i> My Listings</h3>
+      <p class="muted-text">Everything assigned to your partner account appears here.</p>
+
+      <div class="listing-stack" style="margin-top:16px;">
+        <% if (!allItems.length) { %>
+          <div class="empty-state">
+            No listings are assigned yet. Please contact admin to connect your partner account.
+          </div>
+        <% } else { %>
+          <% allItems.forEach(item => { %>
+            <div class="listing-item">
+              <strong><%= item.name || item.company || item.type || 'Listing' %></strong>
+              <div class="listing-meta">
+                Listing ID: <%= item.id %>
+              </div>
+            </div>
+          <% }) %>
+        <% } %>
+      </div>
+    </aside>
+
+    <div class="panel-card">
+      <div class="booking-head">
+        <div>
+          <h3><i class="fas fa-calendar-check"></i> Recent Bookings</h3>
+          <p>Each booking shows the split between your payout and admin commission after payment.</p>
+        </div>
+        <div class="pill-row">
+          <span class="soft-pill"><%= providerType ? providerType.toUpperCase() : 'PARTNER' %></span>
+          <span class="soft-pill"><%= totalBookings %> Bookings</span>
+        </div>
+      </div>
+
+      <% if (!allBookings.length) { %>
+        <div class="empty-state">
+          No bookings yet.
+        </div>
       <% } else { %>
-        <div class="table-responsive">
-          <table class="admin-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Item</th>
-                <th>Date</th>
-                <th>Persons</th>
-                <th>Amount</th>
-                <th>Status</th>
-                <th>Escrow</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              <% bookings.forEach((b, i) => { %>
-                <tr>
-                  <td><%= i + 1 %></td>
-                  <td><%= b.item_name || '-' %></td>
-                  <td><%= b.check_in || '-' %></td>
-                  <td><%= b.persons || 1 %></td>
-                  <td>BDT <%= (b.total_price || 0).toLocaleString() %></td>
-                  <td><span class="status-badge status-<%= b.status %>"><%= b.status %></span></td>
-                  <td><small><%= b.escrow_status || 'held' %></small></td>
-                  <td>
-                    <% if (b.status !== 'completed') { %>
-                      <form action="/provider/bookings/<%= b.id %>/complete" method="POST">
-                        <button type="submit" class="btn-sm">Mark Completed</button>
-                      </form>
-                    <% } else { %>
-                      <small class="text-muted">Completed</small>
-                    <% } %>
-                  </td>
-                </tr>
-              <% }) %>
-            </tbody>
-          </table>
+        <div class="booking-stack">
+          <% allBookings.forEach((b, i) => { %>
+            <% const payout = Math.max(0, Number(b.total_price || 0) - Number(b.provider_commission_amount || 0)); %>
+            <% const travelerPreview = b.traveler_preview || {}; %>
+            <% const coTravelers = travelerPreview.co_travelers || []; %>
+            <article class="booking-card">
+              <div class="booking-card-top">
+                <div>
+                  <h4 class="booking-title"><%= b.item_name || 'Untitled Booking' %></h4>
+                  <div class="booking-subtitle">
+                    <span>Booking #<%= b.id %></span>
+                    <span>Date: <%= b.check_in || '-' %></span>
+                    <% if (b.check_out) { %><span>Checkout: <%= b.check_out %></span><% } %>
+                    <% if (b.seat_numbers) { %><span>Seats: <%= b.seat_numbers %></span><% } %>
+                  </div>
+                </div>
+                <div class="pill-row">
+                  <span class="status-badge status-<%= b.status %>"><%= prettyStatus(b.status) %></span>
+                  <span class="soft-pill">Settlement: <%= b.escrow_status || 'paid_out' %></span>
+                </div>
+              </div>
+
+              <div class="booking-metrics">
+                <div class="metric-box">
+                  <span>Persons</span>
+                  <strong><%= b.persons || 1 %></strong>
+                </div>
+                <div class="metric-box">
+                  <span>Amount</span>
+                  <strong>BDT <%= Number(b.total_price || 0).toLocaleString() %></strong>
+                </div>
+                <div class="metric-box">
+                  <span>Admin Commission</span>
+                  <strong>BDT <%= Number(b.provider_commission_amount || 0).toLocaleString() %></strong>
+                </div>
+                <div class="metric-box">
+                  <span>Your Payout</span>
+                  <strong>BDT <%= payout.toLocaleString() %></strong>
+                </div>
+              </div>
+
+              <div class="booking-actions">
+                <button
+                  type="button"
+                  class="text-button"
+                  onclick="openCustomerModal('customer-modal-<%= i %>')"
+                >
+                  Customer
+                </button>
+              </div>
+            </article>
+
+            <div
+              class="customer-modal"
+              id="customer-modal-<%= i %>"
+              onclick="closeCustomerModal(event, 'customer-modal-<%= i %>')"
+            >
+              <div class="customer-modal-card">
+                <div class="customer-modal-head">
+                  <div>
+                    <h4>Customer Details</h4>
+                    <p><%= b.item_name || 'Booking' %> | Booking #<%= b.id %></p>
+                  </div>
+                  <button type="button" class="modal-close" onclick="forceCloseCustomerModal('customer-modal-<%= i %>')">
+                    <i class="fas fa-times"></i>
+                  </button>
+                </div>
+
+                <div class="details-grid">
+                  <div class="detail-cell">
+                    <span>Customer name</span>
+                    <strong><%= travelerPreview.customer_name || 'Unknown' %></strong>
+                  </div>
+                  <div class="detail-cell">
+                    <span>Email</span>
+                    <strong><%= travelerPreview.customer_email || 'Not provided' %></strong>
+                  </div>
+                  <div class="detail-cell">
+                    <span>Phone</span>
+                    <strong><%= travelerPreview.customer_phone || 'Not provided' %></strong>
+                  </div>
+                </div>
+
+                <% if (coTravelers.length) { %>
+                  <div class="traveler-list">
+                    <% coTravelers.slice(0, 2).forEach((traveler, idx) => { %>
+                      <div class="traveler-chip">
+                        <strong>Traveler <%= idx + 2 %>: <%= traveler.name || 'Unnamed' %></strong>
+                        <small>
+                          <%= traveler.relation || 'Relation not set' %>
+                          <% if (traveler.phone) { %> | <%= traveler.phone %><% } %>
+                          <% if (traveler.gender) { %> | <%= traveler.gender %><% } %>
+                          <% if (traveler.age) { %> | Age <%= traveler.age %><% } %>
+                        </small>
+                      </div>
+                    <% }) %>
+                  </div>
+                <% } %>
+              </div>
+            </div>
+          <% }) %>
         </div>
       <% } %>
     </div>
   </div>
 </section>
+
+<script>
+function openCustomerModal(id) {
+  const modal = document.getElementById(id);
+  if (!modal) return;
+  modal.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function forceCloseCustomerModal(id) {
+  const modal = document.getElementById(id);
+  if (!modal) return;
+  modal.classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function closeCustomerModal(event, id) {
+  if (event.target.id !== id) return;
+  forceCloseCustomerModal(id);
+}
+
+document.addEventListener('keydown', function(event) {
+  if (event.key !== 'Escape') return;
+  const openModal = document.querySelector('.customer-modal.open');
+  if (openModal) {
+    openModal.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+});
+document.addEventListener('click', function(event) {
+  if (event.target.closest('.modal-close')) {
+    event.stopPropagation();
+  }
+});
+window.addEventListener('beforeunload', function() {
+  document.body.style.overflow = '';
+});
+</script>
 
 <%- include('../partials/footer') %>

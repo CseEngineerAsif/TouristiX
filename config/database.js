@@ -1,5 +1,6 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const bcrypt = require('bcryptjs');
 
 const db = new sqlite3.Database(path.join(__dirname, '../database.sqlite'), (err) => {
   if (err) console.error('DB Error:', err);
@@ -7,6 +8,61 @@ const db = new sqlite3.Database(path.join(__dirname, '../database.sqlite'), (err
 });
 
 db.serialize(() => {
+  const PARTNER_DEFAULT_PASSWORD = 'partner123';
+
+  function slugifyPartnerValue(value, fallback) {
+    const normalized = String(value || '')
+      .toLowerCase()
+      .replace(/&/g, ' and ')
+      .replace(/[^a-z0-9]+/g, '.')
+      .replace(/^\.|\.$/g, '');
+    return normalized || fallback;
+  }
+
+  function buildPartnerSeed(tableName, row) {
+    const label =
+      tableName === 'transport' ? (row.company || row.type || 'Transport') :
+      (row.name || row.company || row.type || 'Partner');
+    const slugSource =
+      tableName === 'transport'
+        ? (row.company || row.type)
+        : (row.name || row.company || row.type);
+
+    return {
+      label,
+      email: `${slugifyPartnerValue(slugSource, `${tableName}.${row.id}`)}@partner.local`
+    };
+  }
+
+  function ensurePartnerForItems(tableName, role) {
+    const lookupQuery =
+      tableName === 'transport'
+        ? "SELECT id, owner_user_id, '' as name, company, type FROM transport ORDER BY id ASC"
+        : `SELECT id, owner_user_id, name, '' as company, '' as type FROM ${tableName} ORDER BY id ASC`;
+
+    db.all(lookupQuery, (err, rows) => {
+      if (err || !rows || rows.length === 0) return;
+      rows.forEach((row) => {
+        if (row.owner_user_id) return;
+        const seed = buildPartnerSeed(tableName, row);
+        db.get("SELECT id FROM users WHERE email=?", [seed.email], (uErr, existing) => {
+          if (uErr) return;
+          const finalizeAssign = (userId) => {
+            db.run(`UPDATE ${tableName} SET owner_user_id=? WHERE id=?`, [userId, row.id]);
+          };
+          if (existing && existing.id) return finalizeAssign(existing.id);
+          const hash = bcrypt.hashSync(PARTNER_DEFAULT_PASSWORD, 10);
+          db.run(
+            "INSERT INTO users (name, email, password, role) VALUES (?,?,?,?)",
+            [seed.label, seed.email, hash, role],
+            function () {
+              if (this.lastID) finalizeAssign(this.lastID);
+            }
+          );
+        });
+      });
+    });
+  }
   db.run(`CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -181,6 +237,9 @@ db.serialize(() => {
     if (!colNames.includes('payment_gateway_ref')) {
       db.run("ALTER TABLE bookings ADD COLUMN payment_gateway_ref TEXT");
     }
+    if (!colNames.includes('co_travelers')) {
+      db.run("ALTER TABLE bookings ADD COLUMN co_travelers TEXT");
+    }
     if (!colNames.includes('paid_at')) {
       db.run("ALTER TABLE bookings ADD COLUMN paid_at DATETIME");
     }
@@ -189,6 +248,12 @@ db.serialize(() => {
     }
     if (!colNames.includes('escrow_status')) {
       db.run("ALTER TABLE bookings ADD COLUMN escrow_status TEXT DEFAULT 'none'");
+    }
+    if (!colNames.includes('coupon_code')) {
+      db.run("ALTER TABLE bookings ADD COLUMN coupon_code TEXT");
+    }
+    if (!colNames.includes('coupon_discount')) {
+      db.run("ALTER TABLE bookings ADD COLUMN coupon_discount INTEGER DEFAULT 0");
     }
   });
 
@@ -254,11 +319,23 @@ db.serialize(() => {
     amount INTEGER NOT NULL,
     status TEXT DEFAULT 'pending',
     gateway_ref TEXT,
+    payment_number TEXT,
+    payment_txn_id TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     paid_at DATETIME,
     FOREIGN KEY(user_id) REFERENCES users(id)
   )`);
   db.run("CREATE INDEX IF NOT EXISTS idx_wallet_topups_user ON wallet_topups(user_id, status, created_at)");
+  db.all(`PRAGMA table_info(wallet_topups)`, (err, cols) => {
+    if (err || !Array.isArray(cols)) return;
+    const colNames = cols.map(c => c.name);
+    if (!colNames.includes('payment_number')) {
+      db.run("ALTER TABLE wallet_topups ADD COLUMN payment_number TEXT");
+    }
+    if (!colNames.includes('payment_txn_id')) {
+      db.run("ALTER TABLE wallet_topups ADD COLUMN payment_txn_id TEXT");
+    }
+  });
 
   db.run(`CREATE TABLE IF NOT EXISTS escrow_payments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -349,10 +426,63 @@ db.serialize(() => {
     title TEXT NOT NULL,
     content TEXT NOT NULL,
     media_urls TEXT,
+    status TEXT DEFAULT 'pending',
+    approved_at DATETIME,
+    approved_by INTEGER,
+    reward_coupon_id INTEGER,
+    rejection_note TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(user_id) REFERENCES users(id)
+    FOREIGN KEY(user_id) REFERENCES users(id),
+    FOREIGN KEY(approved_by) REFERENCES users(id)
   )`);
   db.run("CREATE INDEX IF NOT EXISTS idx_blog_posts_user ON blog_posts(user_id, created_at)");
+
+  db.all(`PRAGMA table_info(blog_posts)`, (err, cols) => {
+    if (err || !Array.isArray(cols)) return;
+    const colNames = cols.map(c => c.name);
+    const ensureBlogStatusIndex = () => {
+      db.run("CREATE INDEX IF NOT EXISTS idx_blog_posts_status ON blog_posts(status, created_at)");
+    };
+    if (!colNames.includes('status')) {
+      db.run("ALTER TABLE blog_posts ADD COLUMN status TEXT DEFAULT 'pending'", ensureBlogStatusIndex);
+    } else {
+      ensureBlogStatusIndex();
+    }
+    if (!colNames.includes('approved_at')) {
+      db.run("ALTER TABLE blog_posts ADD COLUMN approved_at DATETIME");
+    }
+    if (!colNames.includes('approved_by')) {
+      db.run("ALTER TABLE blog_posts ADD COLUMN approved_by INTEGER");
+    }
+    if (!colNames.includes('reward_coupon_id')) {
+      db.run("ALTER TABLE blog_posts ADD COLUMN reward_coupon_id INTEGER");
+    }
+    if (!colNames.includes('rejection_note')) {
+      db.run("ALTER TABLE blog_posts ADD COLUMN rejection_note TEXT");
+    }
+  });
+
+  db.run(`CREATE TABLE IF NOT EXISTS coupons (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    code TEXT NOT NULL UNIQUE,
+    discount_type TEXT DEFAULT 'percent',
+    discount_value INTEGER DEFAULT 10,
+    max_discount INTEGER DEFAULT 500,
+    min_order_amount INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'active',
+    reward_source TEXT,
+    reward_ref_id INTEGER,
+    note TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME,
+    used_at DATETIME,
+    used_booking_id INTEGER,
+    FOREIGN KEY(user_id) REFERENCES users(id),
+    FOREIGN KEY(used_booking_id) REFERENCES bookings(id)
+  )`);
+  db.run("CREATE INDEX IF NOT EXISTS idx_coupons_user_status ON coupons(user_id, status, created_at)");
+  db.run("CREATE INDEX IF NOT EXISTS idx_coupons_code ON coupons(code)");
 
   // Seed data
   db.get("SELECT COUNT(*) as cnt FROM tourist_spots", (err, row) => {
@@ -451,7 +581,6 @@ db.serialize(() => {
 
   db.get("SELECT COUNT(*) as cnt FROM users WHERE role='admin'", (err, row) => {
     if (row && row.cnt === 0) {
-      const bcrypt = require('bcryptjs');
       const hash = bcrypt.hashSync('admin123', 10);
       db.run("INSERT INTO users (name, email, password, role) VALUES ('Admin', 'admin@touristix.com', ?, 'admin')", [hash]);
       console.log('✅ Admin created: admin@touristix.com / admin123');
@@ -460,44 +589,16 @@ db.serialize(() => {
 
   db.get("SELECT COUNT(*) as cnt FROM users WHERE email='partner@gmail.com'", (err, row) => {
     if (row && row.cnt === 0) {
-      const bcrypt = require('bcryptjs');
       const hash = bcrypt.hashSync('partner', 10);
       db.run("INSERT INTO users (name, email, password, role) VALUES ('Default Partner', 'partner@gmail.com', ?, 'owner_hotel')", [hash]);
       console.log('✅ Partner created: partner@gmail.com / partner');
     }
   });
 
-  const ensurePartnerForItems = (tableName, role, getLabel) => {
-    db.all(`SELECT id, owner_user_id, name, company, type FROM ${tableName}`, (err, rows) => {
-      if (err || !rows || rows.length === 0) return;
-      rows.forEach((row) => {
-        if (row.owner_user_id) return;
-        const email = `${tableName}-${row.id}@partner.local`;
-        db.get("SELECT id FROM users WHERE email=?", [email], (uErr, existing) => {
-          if (uErr) return;
-          const finalizeAssign = (userId) => {
-            db.run(`UPDATE ${tableName} SET owner_user_id=? WHERE id=?`, [userId, row.id]);
-          };
-          if (existing && existing.id) return finalizeAssign(existing.id);
-          const bcrypt = require('bcryptjs');
-          const hash = bcrypt.hashSync('partner', 10);
-          const label = getLabel(row);
-          db.run(
-            "INSERT INTO users (name, email, password, role) VALUES (?,?,?,?)",
-            [label, email, hash, role],
-            function () {
-              finalizeAssign(this.lastID);
-            }
-          );
-        });
-      });
-    });
-  };
-
-  ensurePartnerForItems('hotels', 'owner_hotel', (row) => `${row.name || 'Hotel'} Partner`);
-  ensurePartnerForItems('transport', 'owner_transport', (row) => `${row.company || row.type || 'Transport'} Partner`);
-  ensurePartnerForItems('guides', 'owner_guide', (row) => `${row.name || 'Guide'} Partner`);
-  ensurePartnerForItems('packages', 'owner_package', (row) => `${row.name || 'Package'} Partner`);
+  ensurePartnerForItems('hotels', 'owner_hotel');
+  ensurePartnerForItems('transport', 'owner_transport');
+  ensurePartnerForItems('guides', 'owner_guide');
+  ensurePartnerForItems('packages', 'owner_package');
 });
 
 module.exports = db;

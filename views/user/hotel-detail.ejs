@@ -150,7 +150,7 @@
       <h3>Book Hotel</h3>
       <button onclick="closeModal()" class="modal-close">&times;</button>
     </div>
-    <form action="/book/hotel" method="POST" class="modal-form js-payment-form">
+    <form action="/book/hotel" method="POST" class="modal-form js-payment-form" data-booking-kind="hotel">
       <input type="hidden" name="hotel_id" id="m_hotel_id"/>
       <input type="hidden" name="hotel_name" id="m_hotel_name"/>
       <input type="hidden" name="total_price" id="m_total_price"/>
@@ -208,4 +208,5 @@ document.getElementById('m_checkout').min = today;
 </script>
 <% } %>
 
+<%- include('../partials/payment-modal') %>
 <%- include('../partials/footer') %>

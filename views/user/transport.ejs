@@ -212,7 +212,7 @@
       <div class="exchange-section section-panel" id="panel-tickets">
         <div class="exchange-title-row">
           <h3><i class="fas fa-ticket"></i> My Transport Tickets</h3>
-          <small>Only admin-confirmed tickets can be released. Exchange window: within 3 days and before 3 hours of departure.</small>
+          <small>Only confirmed tickets can be released. Exchange window: within 3 days and before 3 hours of departure.</small>
         </div>
 
         <% if ((myTransportTickets || []).length === 0) { %>
@@ -246,7 +246,7 @@
                     <small class="muted-text">Release window closed</small>
                   <% } %>
                   <% if (ticket.status === 'pending') { %>
-                    <small class="muted-text">Waiting for admin confirmation</small>
+                    <small class="muted-text">Booking is still pending</small>
                   <% } %>
                   <% if (ticket.status === 'released') { %>
                     <small class="muted-text">Waiting for your approval on incoming requests</small>
