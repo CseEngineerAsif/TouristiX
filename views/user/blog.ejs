@@ -1,94 +1,9 @@
 <%- include('../partials/header') %>
 
-<section class="page-header">
-  <div class="container">
-    <h1><i class="fas fa-pen-nib"></i> Travel Blog</h1>
-    <p>Share your journey, tips, and memories with the community.</p>
-  </div>
-</section>
-
 <style>
 .blog-page {
   display: grid;
   gap: 24px;
-}
-.blog-hero {
-  position: relative;
-  overflow: hidden;
-  background:
-    radial-gradient(circle at top right, rgba(251, 191, 36, 0.28), transparent 32%),
-    linear-gradient(135deg, #0f766e, #155e75 58%, #1d4ed8);
-  color: #fff;
-  border-radius: 28px;
-  padding: 28px;
-  box-shadow: 0 24px 50px rgba(15, 23, 42, 0.16);
-}
-.blog-hero::after {
-  content: '';
-  position: absolute;
-  inset: auto -40px -60px auto;
-  width: 220px;
-  height: 220px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-}
-.blog-hero-grid {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: 1.4fr 0.9fr;
-  gap: 20px;
-  align-items: stretch;
-}
-.blog-hero-copy h2 {
-  margin: 0 0 10px;
-  font-size: clamp(2rem, 3vw, 2.8rem);
-  line-height: 1.05;
-}
-.blog-hero-copy p {
-  margin: 0;
-  max-width: 640px;
-  color: rgba(255, 255, 255, 0.85);
-  line-height: 1.7;
-}
-.blog-hero-stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 22px;
-}
-.blog-stat {
-  background: rgba(255, 255, 255, 0.14);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 18px;
-  padding: 14px;
-  backdrop-filter: blur(10px);
-}
-.blog-stat strong {
-  display: block;
-  font-size: 1.35rem;
-  margin-bottom: 4px;
-}
-.blog-stat span {
-  font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.78);
-}
-.blog-hero-panel {
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 24px;
-  padding: 22px;
-  backdrop-filter: blur(12px);
-}
-.blog-hero-panel h3 {
-  margin: 0 0 12px;
-  font-size: 1.1rem;
-}
-.blog-hero-panel ul {
-  margin: 0;
-  padding-left: 18px;
-  color: rgba(255, 255, 255, 0.88);
-  line-height: 1.8;
 }
 .blog-layout {
   display: grid;
@@ -248,7 +163,6 @@
   box-shadow: 0 16px 30px rgba(15, 23, 42, 0.06);
 }
 @media (max-width: 980px) {
-  .blog-hero-grid,
   .blog-layout {
     grid-template-columns: 1fr;
   }
@@ -257,13 +171,6 @@
   }
 }
 @media (max-width: 640px) {
-  .blog-hero {
-    padding: 22px 18px;
-    border-radius: 24px;
-  }
-  .blog-hero-stats {
-    grid-template-columns: 1fr;
-  }
   .blog-card-header {
     align-items: flex-start;
     flex-direction: column;
@@ -280,37 +187,6 @@
 
 <section class="section">
   <div class="container blog-page">
-    <div class="blog-hero">
-      <div class="blog-hero-grid">
-        <div class="blog-hero-copy">
-          <h2>Stories from roads, rivers, hills, and hidden corners of Bangladesh.</h2>
-          <p>Discover real travel experiences, practical tips, and memorable moments shared by explorers across the country. This space is built for vivid stories, useful advice, and the kind of local detail that makes a trip unforgettable.</p>
-          <div class="blog-hero-stats">
-            <div class="blog-stat">
-              <strong><%= posts.length %></strong>
-              <span>Published stories</span>
-            </div>
-            <div class="blog-stat">
-              <strong><%= new Set((posts || []).map(p => p.user_id)).size %></strong>
-              <span>Storytellers</span>
-            </div>
-            <div class="blog-stat">
-              <strong><%= locals.user ? '1 click' : 'Login' %></strong>
-              <span><%= locals.user ? 'to share your own post' : 'to start posting' %></span>
-            </div>
-          </div>
-        </div>
-        <div class="blog-hero-panel">
-          <h3>What makes a great travel post?</h3>
-          <ul>
-            <li>Share a route, hidden spot, or local tip that helped your journey.</li>
-            <li>Add a few photos or short clips to bring the experience to life.</li>
-            <li>Write in your own voice so others can feel the place through your story.</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-
     <% if (locals.success_msg && success_msg.length) { %>
       <div class="alert alert-success"><%= success_msg[0] %></div>
     <% } %>

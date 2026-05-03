@@ -75,7 +75,7 @@
 
         <% if (locals.user) { %>
           <div style="display:flex; gap:10px; flex-wrap:wrap;">
-            <a href="/hotels/<%= hotel.id %>/chat?return=<%= encodeURIComponent(detailReturn) %>" class="btn-outline">
+            <a href="/chat?type=hotel&item=<%= hotel.id %>" class="btn-outline">
               <i class="fas fa-comments"></i> Chat
             </a>
             <button class="btn-primary" onclick="openBooking('<%= hotel.id %>','<%= hotel.name.replace(/'/g,'') %>',<%= hotel.price_per_night %>)">

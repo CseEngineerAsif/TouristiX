@@ -23,7 +23,7 @@
             </div>
             <% if (locals.user) { %>
             <div class="guide-actions">
-              <a href="/guides/<%= guide.id %>/chat" class="btn-outline">Chat</a>
+              <a href="/chat?type=guide&item=<%= guide.id %>" class="btn-outline">Chat</a>
               <button class="btn-primary" onclick="openGuideBook('<%= guide.id %>','<%= guide.name %>',<%= guide.price_per_day %>)">
                 <i class="fas fa-user-check"></i> Hire Guide
               </button>

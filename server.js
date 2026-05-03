@@ -5,6 +5,7 @@ const flash = require('connect-flash');
 const methodOverride = require('method-override');
 const path = require('path');
 const fs = require('fs');
+const db = require('./config/database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -35,7 +36,44 @@ app.use((req, res, next) => {
   res.locals.user = req.session.user || null;
   res.locals.success_msg = req.flash('success');
   res.locals.error_msg = req.flash('error');
-  next();
+  res.locals.unreadChatCount = 0;
+
+  const user = req.session.user;
+  if (!user) return next();
+
+  const role = user.role;
+  const providerMap = {
+    owner_hotel: {
+      table: 'hotel_messages',
+      itemTable: 'hotels',
+      itemId: 'hotel_id'
+    },
+    owner_guide: {
+      table: 'guide_messages',
+      itemTable: 'guides',
+      itemId: 'guide_id'
+    },
+    owner_transport: {
+      table: 'transport_messages',
+      itemTable: 'transport',
+      itemId: 'transport_id'
+    }
+  };
+  const provider = providerMap[role];
+  const sql = provider
+    ? `SELECT COUNT(*) as count
+       FROM ${provider.table} m
+       JOIN ${provider.itemTable} i ON i.id = m.${provider.itemId}
+       WHERE i.owner_user_id=? AND m.sender_role='user' AND COALESCE(m.read_by_provider,0)=0`
+    : `SELECT
+         (SELECT COUNT(*) FROM hotel_messages WHERE user_id=? AND sender_role!='user' AND COALESCE(read_by_user,0)=0) +
+         (SELECT COUNT(*) FROM guide_messages WHERE user_id=? AND sender_role!='user' AND COALESCE(read_by_user,0)=0) +
+         (SELECT COUNT(*) FROM transport_messages WHERE user_id=? AND sender_role!='user' AND COALESCE(read_by_user,0)=0) as count`;
+  const params = provider ? [user.id] : [user.id, user.id, user.id];
+  db.get(sql, params, (err, row) => {
+    res.locals.unreadChatCount = err ? 0 : Number(row?.count || 0);
+    next();
+  });
 });
 
 // Routes

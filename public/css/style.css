@@ -31,6 +31,8 @@ a { text-decoration: none; color: inherit; }
 .nav-links { list-style: none; display: flex; align-items: center; gap: 4px; }
 .nav-links a { padding: 8px 14px; border-radius: 8px; font-weight: 600; font-size: 0.9rem; color: var(--text-muted); transition: all 0.2s; }
 .nav-links a:hover, .nav-links a.active { color: var(--primary); background: var(--primary-light); }
+.nav-chat-link { position: relative; display: inline-flex; align-items: center; gap: 6px; }
+.nav-chat-badge { position: absolute; top: -5px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--danger); color: white; font-size: 0.68rem; font-weight: 900; display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 0 0 2px white; }
 .btn-nav { background: var(--primary) !important; color: white !important; border-radius: 8px !important; }
 .btn-nav:hover { background: var(--primary-dark) !important; }
 .nav-toggle { display: none; background: none; border: none; font-size: 1.3rem; cursor: pointer; color: var(--dark); }

@@ -38,7 +38,7 @@
             <div class="card-actions-row">
               <a href="/hotels/<%= h.id %><%= returnTo ? ('?return=' + encodeURIComponent(returnTo)) : '' %>" class="btn-sm-outline">View Details</a>
               <% if (locals.user) { %>
-              <a href="/hotels/<%= h.id %>/chat?return=<%= encodeURIComponent(listReturn) %>" class="btn-sm-outline">Chat</a>
+              <a href="/chat?type=hotel&item=<%= h.id %>" class="btn-sm-outline">Chat</a>
               <button class="btn-sm" onclick="openBooking('hotel','<%= h.id %>','<%= h.name.replace(/'/g,'') %>',<%= h.price_per_night %>)">Book Now</button>
               <% } else { %>
               <a href="/auth/login" class="btn-sm-outline">Login to Chat</a>

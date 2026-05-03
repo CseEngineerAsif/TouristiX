@@ -109,9 +109,9 @@ function isExchangeOpen(travelDate, departureTime) {
   const departure = getTravelDateTime(travelDate, departureTime);
   if (!departure) return false;
   const diffMs = departure.getTime() - Date.now();
-  const threeHoursMs = 3 * 60 * 60 * 1000;
+  const sixHoursMs = 6 * 60 * 60 * 1000;
   const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
-  return diffMs > threeHoursMs && diffMs <= threeDaysMs;
+  return diffMs > sixHoursMs && diffMs <= threeDaysMs;
 }
 
 function withTransaction(work, done) {
@@ -643,6 +643,200 @@ function safeReturnTo(value) {
   return raw;
 }
 
+function safeTransportTab(value) {
+  const allowedTabs = new Set([
+    'panel-available',
+    'panel-tickets',
+    'panel-incoming',
+    'panel-released',
+    'panel-myrequests'
+  ]);
+  const raw = String(value || '').trim();
+  return allowedTabs.has(raw) ? raw : 'panel-available';
+}
+
+function dbAllAsync(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => {
+      if (err) return reject(err);
+      return resolve(rows || []);
+    });
+  });
+}
+
+function dbGetAsync(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => {
+      if (err) return reject(err);
+      return resolve(row || null);
+    });
+  });
+}
+
+function dbRunAsync(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function (err) {
+      if (err) return reject(err);
+      return resolve(this);
+    });
+  });
+}
+
+function isProviderRole(role) {
+  return ['owner_hotel', 'owner_transport', 'owner_guide', 'owner_package'].includes(role);
+}
+
+function providerTypeFromRole(role) {
+  if (role === 'owner_hotel') return 'hotel';
+  if (role === 'owner_transport') return 'transport';
+  if (role === 'owner_guide') return 'guide';
+  return '';
+}
+
+const CHAT_META = {
+  hotel: {
+    table: 'hotel_messages',
+    itemTable: 'hotels',
+    itemId: 'hotel_id',
+    nameExpr: 'i.name',
+    subExpr: "i.location || ', ' || i.district",
+    icon: 'fa-hotel'
+  },
+  guide: {
+    table: 'guide_messages',
+    itemTable: 'guides',
+    itemId: 'guide_id',
+    nameExpr: 'i.name',
+    subExpr: "COALESCE(i.specialty, 'Tour Guide')",
+    icon: 'fa-user-tie'
+  },
+  transport: {
+    table: 'transport_messages',
+    itemTable: 'transport',
+    itemId: 'transport_id',
+    nameExpr: "COALESCE(i.company, i.type)",
+    subExpr: "i.from_location || ' to ' || i.to_location",
+    icon: 'fa-bus'
+  }
+};
+
+async function getChatThreadsForUser(user) {
+  const uid = user.id;
+  const role = user.role;
+  const providerType = providerTypeFromRole(role);
+  const providerMode = isProviderRole(role) && providerType;
+  const threadSets = [];
+
+  for (const [type, meta] of Object.entries(CHAT_META)) {
+    if (providerMode && type !== providerType) continue;
+    const where = providerMode ? 'i.owner_user_id = ?' : 'm.user_id = ?';
+    const unreadCase = providerMode
+      ? "SUM(CASE WHEN m.sender_role='user' AND COALESCE(m.read_by_provider,0)=0 THEN 1 ELSE 0 END)"
+      : "SUM(CASE WHEN m.sender_role!='user' AND COALESCE(m.read_by_user,0)=0 THEN 1 ELSE 0 END)";
+    const rows = await dbAllAsync(
+      `SELECT
+          '${type}' as service_type,
+          m.${meta.itemId} as item_id,
+          m.user_id as thread_user_id,
+          ${meta.nameExpr} as service_name,
+          ${meta.subExpr} as service_subtitle,
+          u.name as customer_name,
+          u.email as customer_email,
+          MAX(m.created_at) as last_at,
+          (
+            SELECT mm.message
+            FROM ${meta.table} mm
+            WHERE mm.${meta.itemId}=m.${meta.itemId} AND mm.user_id=m.user_id
+            ORDER BY datetime(mm.created_at) DESC, mm.id DESC
+            LIMIT 1
+          ) as last_message,
+          ${unreadCase} as unread_count,
+          COUNT(*) as message_count
+       FROM ${meta.table} m
+       JOIN ${meta.itemTable} i ON i.id = m.${meta.itemId}
+       JOIN users u ON u.id = m.user_id
+       WHERE ${where}
+       GROUP BY m.${meta.itemId}, m.user_id
+       ORDER BY datetime(last_at) DESC`,
+      [uid]
+    );
+    threadSets.push(...rows.map(row => ({ ...row, icon: meta.icon })));
+  }
+
+  return threadSets.sort((a, b) => String(b.last_at || '').localeCompare(String(a.last_at || '')));
+}
+
+async function getChatMessages(user, serviceType, itemId, threadUserId) {
+  const meta = CHAT_META[serviceType];
+  if (!meta) return null;
+  const uid = user.id;
+  const providerMode = isProviderRole(user.role);
+  const actualThreadUserId = providerMode ? parseInt(threadUserId, 10) : uid;
+  if (!Number.isInteger(actualThreadUserId) || actualThreadUserId <= 0) return null;
+
+  const item = await dbGetAsync(
+    `SELECT i.*, ${meta.nameExpr} as chat_name, ${meta.subExpr} as chat_subtitle
+     FROM ${meta.itemTable} i
+     WHERE i.id=?`,
+    [itemId]
+  );
+  if (!item) return null;
+  if (providerMode && item.owner_user_id !== uid) return null;
+
+  const messages = await dbAllAsync(
+    `SELECT m.*, u.name as customer_name
+     FROM ${meta.table} m
+     JOIN users u ON u.id = m.user_id
+     WHERE m.${meta.itemId}=? AND m.user_id=?
+     ORDER BY datetime(m.created_at) ASC, m.id ASC`,
+    [itemId, actualThreadUserId]
+  );
+
+  if (providerMode) {
+    await dbRunAsync(
+      `UPDATE ${meta.table} SET read_by_provider=1 WHERE ${meta.itemId}=? AND user_id=? AND sender_role='user'`,
+      [itemId, actualThreadUserId]
+    );
+  } else {
+    await dbRunAsync(
+      `UPDATE ${meta.table} SET read_by_user=1 WHERE ${meta.itemId}=? AND user_id=? AND sender_role!='user'`,
+      [itemId, actualThreadUserId]
+    );
+  }
+
+  return {
+    serviceType,
+    itemId,
+    threadUserId: actualThreadUserId,
+    item,
+    messages,
+    icon: meta.icon
+  };
+}
+
+async function getChatUnreadCount(user) {
+  if (!user) return 0;
+  const providerMode = isProviderRole(user.role);
+  const providerType = providerTypeFromRole(user.role);
+  let total = 0;
+  for (const [type, meta] of Object.entries(CHAT_META)) {
+    if (providerMode && type !== providerType) continue;
+    const row = await dbGetAsync(
+      providerMode
+        ? `SELECT COUNT(*) as count
+           FROM ${meta.table} m
+           JOIN ${meta.itemTable} i ON i.id = m.${meta.itemId}
+           WHERE i.owner_user_id=? AND m.sender_role='user' AND COALESCE(m.read_by_provider,0)=0`
+        : `SELECT COUNT(*) as count
+           FROM ${meta.table}
+           WHERE user_id=? AND sender_role!='user' AND COALESCE(read_by_user,0)=0`,
+      [user.id]
+    );
+    total += Number(row?.count || 0);
+  }
+  return total;
+}
+
 // Home
 router.get('/', (req, res) => {
   db.all("SELECT * FROM tourist_spots ORDER BY rating DESC LIMIT 6", (err, spots) => {
@@ -650,6 +844,118 @@ router.get('/', (req, res) => {
       res.render('user/home', { title: 'Home', spots: spots || [], packages: packages || [], user: req.session.user });
     });
   });
+});
+
+router.get('/budget', async (req, res) => {
+  try {
+    const [spots, hotels, guides, transports, packages] = await Promise.all([
+      dbAllAsync("SELECT id, name, district, division, category, entry_fee, rating FROM tourist_spots ORDER BY rating DESC, name ASC"),
+      dbAllAsync("SELECT id, name, location, district, price_per_night, rating, available_rooms FROM hotels ORDER BY rating DESC, price_per_night ASC"),
+      dbAllAsync("SELECT id, name, specialty, languages, price_per_day, rating, available FROM guides WHERE available=1 ORDER BY rating DESC, price_per_day ASC"),
+      dbAllAsync("SELECT id, type, company, from_location, to_location, departure_time, price, seats_available FROM transport ORDER BY price ASC"),
+      dbAllAsync("SELECT id, name, destination, duration, price, max_persons FROM packages ORDER BY price ASC")
+    ]);
+
+    res.render('user/budget', {
+      title: 'Budget Calculator',
+      user: req.session.user,
+      spots,
+      hotels,
+      guides,
+      transports,
+      packages
+    });
+  } catch (err) {
+    res.render('user/budget', {
+      title: 'Budget Calculator',
+      user: req.session.user,
+      spots: [],
+      hotels: [],
+      guides: [],
+      transports: [],
+      packages: []
+    });
+  }
+});
+
+router.get('/chat', isAuth, async (req, res) => {
+  try {
+    const threads = await getChatThreadsForUser(req.session.user);
+    const serviceType = String(req.query.type || threads[0]?.service_type || '').trim();
+    const itemId = parseInt(req.query.item || threads[0]?.item_id || 0, 10);
+    const threadUserId = parseInt(req.query.user || threads[0]?.thread_user_id || req.session.user.id, 10);
+    const activeThread = serviceType && itemId
+      ? await getChatMessages(req.session.user, serviceType, itemId, threadUserId)
+      : null;
+    const refreshedThreads = await getChatThreadsForUser(req.session.user);
+
+    res.render('user/chat', {
+      title: 'Chat',
+      threads: refreshedThreads,
+      activeThread,
+      unreadChatCount: await getChatUnreadCount(req.session.user),
+      user: req.session.user
+    });
+  } catch (err) {
+    req.flash('error', 'Could not load chat inbox.');
+    res.redirect('/');
+  }
+});
+
+router.post('/chat/send', isAuth, async (req, res) => {
+  const serviceType = String(req.body.service_type || '').trim();
+  const itemId = parseInt(req.body.item_id, 10);
+  const requestedThreadUserId = parseInt(req.body.thread_user_id || req.session.user.id, 10);
+  const text = String(req.body.message || '').trim();
+  const meta = CHAT_META[serviceType];
+  const providerMode = isProviderRole(req.session.user.role);
+  const threadUserId = providerMode ? requestedThreadUserId : req.session.user.id;
+  const redirectTo = `/chat?type=${encodeURIComponent(serviceType)}&item=${encodeURIComponent(itemId)}&user=${encodeURIComponent(threadUserId)}`;
+
+  if (!meta || !Number.isInteger(itemId) || itemId <= 0 || !Number.isInteger(threadUserId) || threadUserId <= 0) {
+    req.flash('error', 'Invalid chat thread.');
+    return res.redirect('/chat');
+  }
+  if (!text) {
+    req.flash('error', 'Please write a message.');
+    return res.redirect(redirectTo);
+  }
+
+  try {
+    const item = await dbGetAsync(`SELECT id, owner_user_id FROM ${meta.itemTable} WHERE id=?`, [itemId]);
+    if (!item) {
+      req.flash('error', 'Chat service not found.');
+      return res.redirect('/chat');
+    }
+    if (providerMode && item.owner_user_id !== req.session.user.id) {
+      req.flash('error', 'You can only reply to your own service chats.');
+      return res.redirect('/chat');
+    }
+    if (!providerMode) {
+      const exists = await dbGetAsync("SELECT id FROM users WHERE id=?", [threadUserId]);
+      if (!exists || threadUserId !== req.session.user.id) {
+        req.flash('error', 'Invalid chat user.');
+        return res.redirect('/chat');
+      }
+    }
+
+    await dbRunAsync(
+      `INSERT INTO ${meta.table} (${meta.itemId}, user_id, sender_role, message, read_by_user, read_by_provider)
+       VALUES (?,?,?,?,?,?)`,
+      [
+        itemId,
+        threadUserId,
+        providerMode ? 'provider' : 'user',
+        text,
+        providerMode ? 0 : 1,
+        providerMode ? 1 : 0
+      ]
+    );
+    return res.redirect(redirectTo);
+  } catch (err) {
+    req.flash('error', 'Could not send message. Please try again.');
+    return res.redirect(redirectTo);
+  }
 });
 
 // All Spots
@@ -802,7 +1108,7 @@ router.post('/hotels/:id/chat', isAuth, (req, res) => {
   const hotelId = parseInt(req.params.id, 10);
   const text = String(req.body.message || '').trim();
   const returnTo = safeReturnTo(req.query.return);
-  const backUrl = returnTo ? `/hotels/${hotelId}/chat?return=${encodeURIComponent(returnTo)}` : `/hotels/${hotelId}/chat`;
+  const backUrl = `/chat?type=hotel&item=${encodeURIComponent(hotelId)}&user=${encodeURIComponent(req.session.user.id)}`;
   if (!Number.isInteger(hotelId) || hotelId <= 0) return res.redirect('/hotels');
   if (!text) {
     req.flash('error', 'Please write a message.');
@@ -817,20 +1123,14 @@ router.post('/hotels/:id/chat', isAuth, (req, res) => {
 
     const uid = req.session.user.id;
     db.run(
-      "INSERT INTO hotel_messages (user_id, hotel_id, sender_role, message) VALUES (?,?,?,?)",
+      "INSERT INTO hotel_messages (user_id, hotel_id, sender_role, message, read_by_user, read_by_provider) VALUES (?,?,?,?,1,0)",
       [uid, hotelId, 'user', text],
       function (insertErr) {
         if (insertErr) {
           req.flash('error', 'Could not send message. Please try again.');
           return res.redirect(backUrl);
         }
-
-        const autoReply = `Thanks for your message. Our team at ${hotel.name} will respond soon.`;
-        db.run(
-          "INSERT INTO hotel_messages (user_id, hotel_id, sender_role, message) VALUES (?,?,?,?)",
-          [uid, hotelId, 'hotel', autoReply],
-          () => res.redirect(backUrl)
-        );
+        return res.redirect(returnTo || backUrl);
       }
     );
   });
@@ -840,6 +1140,7 @@ router.post('/hotels/:id/chat', isAuth, (req, res) => {
 router.get('/transport', (req, res) => {
   const { from, to, type } = req.query;
   const returnTo = safeReturnTo(req.query.return);
+  const activeTab = safeTransportTab(req.query.tab);
   let query = "SELECT * FROM transport WHERE 1=1";
   const params = [];
   if (from) { query += " AND from_location LIKE ?"; params.push(`%${from}%`); }
@@ -853,6 +1154,7 @@ router.get('/transport', (req, res) => {
         from,
         to,
         type,
+        activeTab,
         returnTo,
         myTransportTickets: [],
         releasedTickets: [],
@@ -867,7 +1169,7 @@ router.get('/transport', (req, res) => {
          FROM bookings b
          JOIN transport t ON t.id = b.item_id
          WHERE b.user_id = ? AND b.type='transport' AND b.status IN ('pending','confirmed','released')
-         ORDER BY CASE WHEN b.status='released' THEN 0 ELSE 1 END, b.check_in ASC`,
+         ORDER BY datetime(b.created_at) DESC, b.id DESC`,
         [uid],
         (err2, myTickets) => {
           db.all(
@@ -900,7 +1202,7 @@ router.get('/transport', (req, res) => {
                      FROM exchange_requests er
                      JOIN bookings b ON b.id = er.booking_id
                      JOIN transport t ON t.id = b.item_id
-                     JOIN users u ON u.id = b.user_id
+                     JOIN users u ON u.id = COALESCE(er.owner_id, b.user_id)
                      WHERE er.requester_id = ? AND b.type='transport'
                      ORDER BY er.created_at DESC`,
                     [uid],
@@ -908,7 +1210,10 @@ router.get('/transport', (req, res) => {
                       const mappedMyTickets = (myTickets || []).map((ticket) => ({
                         ...ticket,
                         exchange_open: isExchangeOpen(ticket.check_in, ticket.departure_time)
-                      }));
+                      })).sort((a, b) => {
+                        const dateCompare = String(b.created_at || '').localeCompare(String(a.created_at || ''));
+                        return dateCompare || Number(b.id || 0) - Number(a.id || 0);
+                      });
                       const mappedReleasedTickets = (releasedTickets || []).map((ticket) => ({
                         ...ticket,
                         exchange_open: isExchangeOpen(ticket.check_in, ticket.departure_time)
@@ -920,6 +1225,7 @@ router.get('/transport', (req, res) => {
                         from,
                         to,
                         type,
+                        activeTab,
                         returnTo,
                         myTransportTickets: mappedMyTickets,
                         releasedTickets: mappedReleasedTickets,
@@ -998,10 +1304,11 @@ router.get('/guides/:id/chat', isAuth, (req, res) => {
 router.post('/guides/:id/chat', isAuth, (req, res) => {
   const guideId = parseInt(req.params.id, 10);
   const text = String(req.body.message || '').trim();
+  const backUrl = `/chat?type=guide&item=${encodeURIComponent(guideId)}&user=${encodeURIComponent(req.session.user.id)}`;
   if (!Number.isInteger(guideId) || guideId <= 0) return res.redirect('/guides');
   if (!text) {
     req.flash('error', 'Please write a message.');
-    return res.redirect(`/guides/${guideId}/chat`);
+    return res.redirect(backUrl);
   }
 
   db.get("SELECT id, name FROM guides WHERE id=? AND available=1", [guideId], (err, guide) => {
@@ -1012,20 +1319,14 @@ router.post('/guides/:id/chat', isAuth, (req, res) => {
 
     const uid = req.session.user.id;
     db.run(
-      "INSERT INTO guide_messages (user_id, guide_id, sender_role, message) VALUES (?,?,?,?)",
+      "INSERT INTO guide_messages (user_id, guide_id, sender_role, message, read_by_user, read_by_provider) VALUES (?,?,?,?,1,0)",
       [uid, guideId, 'user', text],
       function (insertErr) {
         if (insertErr) {
           req.flash('error', 'Could not send message. Please try again.');
-          return res.redirect(`/guides/${guideId}/chat`);
+          return res.redirect(backUrl);
         }
-
-        const autoReply = `Thanks for your message. I am ${guide.name}. I will get back to you soon.`;
-        db.run(
-          "INSERT INTO guide_messages (user_id, guide_id, sender_role, message) VALUES (?,?,?,?)",
-          [uid, guideId, 'guide', autoReply],
-          () => res.redirect(`/guides/${guideId}/chat`)
-        );
+        return res.redirect(backUrl);
       }
     );
   });
@@ -1483,10 +1784,11 @@ router.post('/book/transport', isAuth, (req, res) => {
   });
 });
 
-// Release transport ticket for exchange (window: within 3 days and before 3 hours of departure)
+// Release transport ticket for exchange (window: within 3 days and before 6 hours of departure)
 router.post('/bookings/:id/release-ticket', isAuth, (req, res) => {
   const bookingId = req.params.id;
   const uid = req.session.user.id;
+  const redirectTo = '/transport?tab=panel-released';
 
   db.get(
     `SELECT b.*, t.departure_time
@@ -1497,19 +1799,19 @@ router.post('/bookings/:id/release-ticket', isAuth, (req, res) => {
     (err, booking) => {
       if (err || !booking) {
         req.flash('error', 'Transport booking not found.');
-        return res.redirect('/transport');
+        return res.redirect(redirectTo);
       }
       if (booking.status !== 'confirmed') {
         req.flash('error', 'Only confirmed transport tickets can be released.');
-        return res.redirect('/transport');
+        return res.redirect(redirectTo);
       }
       if (booking.exchange_locked) {
         req.flash('error', 'This exchanged ticket is locked and cannot be released.');
-        return res.redirect('/transport');
+        return res.redirect(redirectTo);
       }
       if (!isExchangeOpen(booking.check_in, booking.departure_time)) {
-        req.flash('error', 'Ticket can only be released within 3 days and before 3 hours of departure.');
-        return res.redirect('/transport');
+        req.flash('error', 'Ticket can only be released within 3 days and before 6 hours of departure.');
+        return res.redirect(redirectTo);
       }
 
       const note = `\nReleased for exchange at ${new Date().toISOString()}.`;
@@ -1519,10 +1821,10 @@ router.post('/bookings/:id/release-ticket', isAuth, (req, res) => {
         function (updateErr) {
           if (updateErr || this.changes === 0) {
             req.flash('error', 'Could not release ticket. Please try again.');
-            return res.redirect('/transport');
+            return res.redirect(redirectTo);
           }
-          req.flash('success', 'Ticket released. Other tourists can now claim it.');
-          return res.redirect('/transport');
+          req.flash('success', 'Ticket released. You can see it in Released Exchange now.');
+          return res.redirect(redirectTo);
         }
       );
     }
@@ -1533,6 +1835,7 @@ router.post('/bookings/:id/release-ticket', isAuth, (req, res) => {
 router.post('/tickets/:id/request-exchange', isAuth, (req, res) => {
   const bookingId = req.params.id;
   const uid = req.session.user.id;
+  const redirectTo = '/transport?tab=panel-released';
 
   db.get(
     `SELECT b.*, t.departure_time
@@ -1543,15 +1846,15 @@ router.post('/tickets/:id/request-exchange', isAuth, (req, res) => {
     (err, booking) => {
       if (err || !booking) {
         req.flash('error', 'Released ticket not found.');
-        return res.redirect('/transport');
+        return res.redirect(redirectTo);
       }
       if (booking.user_id === uid) {
         req.flash('error', 'You cannot request your own released ticket.');
-        return res.redirect('/transport');
+        return res.redirect(redirectTo);
       }
       if (!isExchangeOpen(booking.check_in, booking.departure_time)) {
-        req.flash('error', 'This ticket can only be requested within 3 days and before 3 hours of departure.');
-        return res.redirect('/transport');
+        req.flash('error', 'This ticket can only be requested within 3 days and before 6 hours of departure.');
+        return res.redirect(redirectTo);
       }
 
       db.get(
@@ -1564,11 +1867,11 @@ router.post('/tickets/:id/request-exchange', isAuth, (req, res) => {
         (checkErr, existingReq) => {
           if (checkErr) {
             req.flash('error', 'Could not submit request now. Please try again.');
-            return res.redirect('/transport');
+            return res.redirect(redirectTo);
           }
           if (existingReq) {
             req.flash('error', 'You already requested this exchanged ticket.');
-            return res.redirect('/transport');
+            return res.redirect(redirectTo);
           }
 
           const amount = Number(booking.total_price || 0);
@@ -1586,11 +1889,19 @@ router.post('/tickets/:id/request-exchange', isAuth, (req, res) => {
                 function (debitErr) {
                   if (debitErr || this.changes === 0) return finish(debitErr || new Error('Could not hold payment.'));
                   db.run(
-                    "INSERT INTO exchange_requests (booking_id, requester_id, amount, payment_status, status) VALUES (?, ?, ?, 'held', 'pending')",
-                    [bookingId, uid, amount],
+                    "INSERT INTO exchange_requests (booking_id, requester_id, owner_id, amount, payment_status, status) VALUES (?, ?, ?, ?, 'held', 'pending')",
+                    [bookingId, uid, booking.user_id, amount],
                     function (insertErr) {
                       if (insertErr) return finish(insertErr);
-                      return finish(null);
+                      recordWalletTx(
+                        uid,
+                        -amount,
+                        'exchange_hold',
+                        'exchange_request',
+                        this.lastID,
+                        `Payment held for exchange ticket #${bookingId}`,
+                        (txErr) => finish(txErr || null)
+                      );
                     }
                   );
                 }
@@ -1603,10 +1914,10 @@ router.post('/tickets/:id/request-exchange', isAuth, (req, res) => {
               } else {
                 req.flash('error', 'Could not submit request now. Please try again.');
               }
-              return res.redirect('/transport');
+              return res.redirect(redirectTo);
             }
             req.flash('success', 'Exchange request submitted. Payment is held until owner approval.');
-            return res.redirect('/transport');
+            return res.redirect('/transport?tab=panel-myrequests');
           });
         }
       );
@@ -1618,6 +1929,7 @@ router.post('/tickets/:id/request-exchange', isAuth, (req, res) => {
 router.post('/exchange-requests/:id/accept', isAuth, (req, res) => {
   const requestId = req.params.id;
   const ownerId = req.session.user.id;
+  const redirectTo = '/transport?tab=panel-incoming';
 
   withTransaction((finish) => {
     db.get(
@@ -1644,8 +1956,8 @@ router.post('/exchange-requests/:id/accept', isAuth, (req, res) => {
             function (transferErr) {
               if (transferErr || this.changes === 0) return finish(transferErr || new Error('TRANSFER_FAILED'));
               db.run(
-                "UPDATE exchange_requests SET status='accepted', payment_status='released_to_owner', processed_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'",
-                [requestId],
+                "UPDATE exchange_requests SET owner_id=COALESCE(owner_id, ?), status='accepted', payment_status='released_to_owner', processed_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'",
+                [ownerId, requestId],
                 function (acceptErr) {
                   if (acceptErr || this.changes === 0) return finish(acceptErr || new Error('ACCEPT_FAILED'));
                   db.all(
@@ -1660,8 +1972,8 @@ router.post('/exchange-requests/:id/accept', isAuth, (req, res) => {
                         const refundAmount = Number(other.amount || 0);
                         const finalizeReject = () => {
                           db.run(
-                            "UPDATE exchange_requests SET status='rejected', payment_status='refunded', admin_note='Another requester accepted by owner.', processed_at=CURRENT_TIMESTAMP WHERE id=?",
-                            [other.id],
+                            "UPDATE exchange_requests SET owner_id=COALESCE(owner_id, ?), status='rejected', payment_status='refunded', admin_note='Another requester accepted by owner.', processed_at=CURRENT_TIMESTAMP WHERE id=?",
+                            [ownerId, other.id],
                             (rejectErr) => {
                               if (rejectErr) return finish(rejectErr);
                               return processNext();
@@ -1674,7 +1986,15 @@ router.post('/exchange-requests/:id/accept', isAuth, (req, res) => {
                           [refundAmount, other.requester_id],
                           function (refundErr) {
                             if (refundErr || this.changes === 0) return finish(refundErr || new Error('REFUND_FAILED'));
-                            return finalizeReject();
+                            recordWalletTx(
+                              other.requester_id,
+                              refundAmount,
+                              'exchange_refund',
+                              'exchange_request',
+                              other.id,
+                              'Exchange request refunded because another requester was accepted.',
+                              (txErr) => txErr ? finish(txErr) : finalizeReject()
+                            );
                           }
                         );
                       };
@@ -1693,7 +2013,15 @@ router.post('/exchange-requests/:id/accept', isAuth, (req, res) => {
           [amount, ownerId],
           function (creditErr) {
             if (creditErr || this.changes === 0) return finish(creditErr || new Error('CREDIT_FAILED'));
-            return proceedBookingTransfer();
+            recordWalletTx(
+              ownerId,
+              amount,
+              'exchange_payout',
+              'exchange_request',
+              requestId,
+              `Exchange payout for released ticket #${exchangeReq.booking_id}`,
+              (txErr) => txErr ? finish(txErr) : proceedBookingTransfer()
+            );
           }
         );
       }
@@ -1701,10 +2029,10 @@ router.post('/exchange-requests/:id/accept', isAuth, (req, res) => {
   }, (txErr) => {
     if (txErr) {
       req.flash('error', 'Could not accept exchange request.');
-      return res.redirect('/transport');
+      return res.redirect(redirectTo);
     }
     req.flash('success', 'Exchange accepted. Ticket transferred and payment sent to your wallet.');
-    return res.redirect('/transport');
+    return res.redirect(redirectTo);
   });
 });
 
@@ -1712,6 +2040,7 @@ router.post('/exchange-requests/:id/accept', isAuth, (req, res) => {
 router.post('/exchange-requests/:id/reject', isAuth, (req, res) => {
   const requestId = req.params.id;
   const ownerId = req.session.user.id;
+  const redirectTo = '/transport?tab=panel-incoming';
 
   withTransaction((finish) => {
     db.get(
@@ -1727,8 +2056,8 @@ router.post('/exchange-requests/:id/reject', isAuth, (req, res) => {
         const refundAmount = Number(exchangeReq.amount || 0);
         const finalizeReject = () => {
           db.run(
-            "UPDATE exchange_requests SET status='rejected', payment_status='refunded', admin_note='Rejected by ticket owner.', processed_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'",
-            [requestId],
+            "UPDATE exchange_requests SET owner_id=COALESCE(owner_id, ?), status='rejected', payment_status='refunded', admin_note='Rejected by ticket owner.', processed_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'",
+            [ownerId, requestId],
             function (updateErr) {
               if (updateErr || this.changes === 0) return finish(updateErr || new Error('REJECT_FAILED'));
               return finish(null);
@@ -1742,7 +2071,15 @@ router.post('/exchange-requests/:id/reject', isAuth, (req, res) => {
           [refundAmount, exchangeReq.requester_id],
           function (refundErr) {
             if (refundErr || this.changes === 0) return finish(refundErr || new Error('REFUND_FAILED'));
-            return finalizeReject();
+            recordWalletTx(
+              exchangeReq.requester_id,
+              refundAmount,
+              'exchange_refund',
+              'exchange_request',
+              requestId,
+              'Exchange request rejected by ticket owner.',
+              (txErr) => txErr ? finish(txErr) : finalizeReject()
+            );
           }
         );
       }
@@ -1750,10 +2087,10 @@ router.post('/exchange-requests/:id/reject', isAuth, (req, res) => {
   }, (txErr) => {
     if (txErr) {
       req.flash('error', 'Could not reject exchange request.');
-      return res.redirect('/transport');
+      return res.redirect(redirectTo);
     }
     req.flash('success', 'Exchange request rejected and payment refunded.');
-    return res.redirect('/transport');
+    return res.redirect(redirectTo);
   });
 });
 

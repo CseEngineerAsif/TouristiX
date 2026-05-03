@@ -261,6 +261,7 @@ db.serialize(() => {
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     booking_id INTEGER NOT NULL,
     requester_id INTEGER NOT NULL,
+    owner_id INTEGER,
     amount INTEGER DEFAULT 0,
     payment_status TEXT DEFAULT 'held',
     status TEXT DEFAULT 'pending',
@@ -282,6 +283,9 @@ db.serialize(() => {
     const ensureIndex = () => {
       db.run("CREATE INDEX IF NOT EXISTS idx_exchange_requests_payment ON exchange_requests(payment_status, status)");
     };
+    if (!colNames.includes('owner_id')) {
+      db.run("ALTER TABLE exchange_requests ADD COLUMN owner_id INTEGER");
+    }
     if (!colNames.includes('amount')) {
       db.run("ALTER TABLE exchange_requests ADD COLUMN amount INTEGER DEFAULT 0", () => {
         if (!colNames.includes('payment_status')) {
@@ -390,6 +394,8 @@ db.serialize(() => {
     guide_id INTEGER NOT NULL,
     sender_role TEXT NOT NULL,
     message TEXT NOT NULL,
+    read_by_user INTEGER DEFAULT 0,
+    read_by_provider INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(user_id) REFERENCES users(id),
     FOREIGN KEY(guide_id) REFERENCES guides(id)
@@ -402,11 +408,43 @@ db.serialize(() => {
     hotel_id INTEGER NOT NULL,
     sender_role TEXT NOT NULL,
     message TEXT NOT NULL,
+    read_by_user INTEGER DEFAULT 0,
+    read_by_provider INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(user_id) REFERENCES users(id),
     FOREIGN KEY(hotel_id) REFERENCES hotels(id)
   )`);
   db.run("CREATE INDEX IF NOT EXISTS idx_hotel_messages_thread ON hotel_messages(user_id, hotel_id, created_at)");
+
+  db.run(`CREATE TABLE IF NOT EXISTS transport_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    transport_id INTEGER NOT NULL,
+    sender_role TEXT NOT NULL,
+    message TEXT NOT NULL,
+    read_by_user INTEGER DEFAULT 0,
+    read_by_provider INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id),
+    FOREIGN KEY(transport_id) REFERENCES transport(id)
+  )`);
+  db.run("CREATE INDEX IF NOT EXISTS idx_transport_messages_thread ON transport_messages(user_id, transport_id, created_at)");
+
+  const ensureMessageReadColumns = (tableName) => {
+    db.all(`PRAGMA table_info(${tableName})`, (err, cols) => {
+      if (err || !Array.isArray(cols)) return;
+      const colNames = cols.map(c => c.name);
+      if (!colNames.includes('read_by_user')) {
+        db.run(`ALTER TABLE ${tableName} ADD COLUMN read_by_user INTEGER DEFAULT 0`);
+      }
+      if (!colNames.includes('read_by_provider')) {
+        db.run(`ALTER TABLE ${tableName} ADD COLUMN read_by_provider INTEGER DEFAULT 0`);
+      }
+    });
+  };
+  ensureMessageReadColumns('guide_messages');
+  ensureMessageReadColumns('hotel_messages');
+  ensureMessageReadColumns('transport_messages');
 
   db.run(`CREATE TABLE IF NOT EXISTS transport_seats (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

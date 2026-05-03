@@ -1,0 +1,672 @@
+<%- include('../partials/header') %>
+
+<section class="page-header">
+  <div class="container">
+    <h1><i class="fas fa-calculator"></i> Tour Budget Calculator</h1>
+    <p>Plan costs using TouristiX hotels, transport, guides, packages, and tourist spots</p>
+  </div>
+</section>
+
+<style>
+.budget-page { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(340px, 0.8fr); gap: 22px; align-items: start; }
+.budget-panel { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; box-shadow: 0 12px 28px rgba(15,23,42,0.06); padding: 22px; }
+.budget-panel h3 { color: #0f172a; display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+.budget-intro { grid-column: 1 / -1; display: grid; grid-template-columns: 1.2fr repeat(4, minmax(120px, 0.32fr)); gap: 12px; }
+.budget-intro-main { background: #ffffff; border: 1px solid #bbf7d0; border-radius: 16px; padding: 18px 20px; box-shadow: 0 12px 28px rgba(15,23,42,0.06); }
+.budget-intro-main h2 { color: #0f172a; font-size: 1.35rem; margin-bottom: 6px; }
+.budget-intro-main p { color: #64748b; font-size: 0.92rem; margin: 0; }
+.budget-kpi { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 14px; }
+.budget-kpi span { display: block; color: #64748b; font-size: 0.75rem; font-weight: 800; }
+.budget-kpi strong { display: block; color: #047857; font-size: 1.3rem; line-height: 1.2; margin-top: 2px; }
+.budget-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 15px; }
+.budget-field { display: flex; flex-direction: column; gap: 7px; }
+.budget-field.wide { grid-column: span 2; }
+.budget-field.full { grid-column: 1 / -1; }
+.budget-field label { color: #065f46; font-weight: 800; font-size: 0.84rem; }
+.budget-field input, .budget-field select { width: 100%; min-height: 44px; border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px 12px; color: #1e293b; font-size: 0.92rem; background: #fff; outline: none; }
+.budget-field input:focus, .budget-field select:focus { border-color: #059669; box-shadow: 0 0 0 3px rgba(5,150,105,0.12); }
+.budget-inline { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.budget-muted { color: #64748b; font-size: 0.82rem; margin-top: 6px; }
+.budget-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+.budget-pillbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
+.budget-pill { border: 1px solid #bbf7d0; background: #f0fdf4; color: #047857; border-radius: 999px; padding: 7px 11px; font-size: 0.8rem; font-weight: 800; }
+.budget-compact-note { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 12px; color: #64748b; font-size: 0.84rem; margin-bottom: 16px; }
+.budget-summary { position: sticky; top: 82px; }
+.budget-total { background: #ecfdf3; border: 1px solid #a7f3d0; border-radius: 14px; padding: 16px; margin-bottom: 16px; }
+.budget-total span { display: block; color: #64748b; font-weight: 800; font-size: 0.8rem; }
+.budget-total strong { display: block; color: #047857; font-size: 2rem; line-height: 1.15; margin-top: 4px; }
+.budget-breakdown { display: grid; gap: 10px; }
+.budget-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid #e2e8f0; padding-bottom: 9px; color: #475569; font-size: 0.9rem; }
+.budget-row strong { color: #0f172a; white-space: nowrap; }
+.budget-row.total-line { border-bottom: 0; padding-top: 4px; font-weight: 800; }
+.budget-suggestion { margin-top: 14px; padding: 12px; border-radius: 12px; background: #f8fafc; border: 1px solid #e2e8f0; color: #475569; font-size: 0.86rem; }
+.budget-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.budget-links a { border: 1px solid #bbf7d0; color: #047857; background: #f0fdf4; border-radius: 999px; padding: 6px 10px; font-weight: 800; font-size: 0.78rem; }
+.budget-warning { color: #b45309; background: #fffbeb; border-color: #fde68a; }
+@media (max-width: 1040px) { .budget-page, .budget-intro { grid-template-columns: 1fr; } .budget-summary { position: static; } }
+@media (max-width: 760px) { .budget-grid, .budget-inline { grid-template-columns: 1fr; } .budget-field.wide, .budget-field.full { grid-column: auto; } }
+</style>
+
+<section class="section">
+  <div class="container budget-page">
+    <div class="budget-intro">
+      <div class="budget-intro-main">
+        <h2>Build a trip estimate from real TouristiX services</h2>
+        <p>Select a district or route to pull matching transport, hotels, guides, packages, and spot entry fees. Manual fields stay available for custom plans.</p>
+      </div>
+      <div class="budget-kpi"><span>Destinations</span><strong><%= (spots || []).length %></strong></div>
+      <div class="budget-kpi"><span>Hotels</span><strong><%= (hotels || []).length %></strong></div>
+      <div class="budget-kpi"><span>Routes</span><strong><%= (transports || []).length %></strong></div>
+      <div class="budget-kpi"><span>Guides</span><strong><%= (guides || []).length %></strong></div>
+    </div>
+
+    <form class="budget-panel" id="budgetForm">
+      <h3><i class="fas fa-sliders"></i> Trip Inputs</h3>
+      <div class="budget-pillbar">
+        <span class="budget-pill" id="routeCount">Routes: 0</span>
+        <span class="budget-pill" id="hotelCount">Hotels: 0</span>
+        <span class="budget-pill" id="packageCount">Packages: 0</span>
+        <span class="budget-pill" id="entryFeeHint">Entry fees: BDT 0</span>
+      </div>
+      <div class="budget-compact-note">
+        Start from dropdowns for automatic suggestions, or type manual locations and prices. The estimate starts at BDT 0 until you choose or enter costs.
+      </div>
+      <div class="budget-grid">
+        <div class="budget-field">
+          <label for="tripType">Trip type</label>
+          <select id="tripType">
+            <option value="family">Family</option>
+            <option value="friends">Friends</option>
+            <option value="couple">Couple</option>
+            <option value="solo">Solo</option>
+          </select>
+        </div>
+        <div class="budget-field">
+          <label for="travelStyle">Travel style</label>
+          <select id="travelStyle">
+            <option value="manual">Manual</option>
+            <option value="budget">Budget</option>
+            <option value="standard">Standard</option>
+            <option value="premium">Premium</option>
+          </select>
+        </div>
+        <div class="budget-field">
+          <label for="adults">Adults</label>
+          <input id="adults" type="number" min="1" value="2">
+        </div>
+        <div class="budget-field">
+          <label for="children">Children (&lt;12)</label>
+          <input id="children" type="number" min="0" value="0">
+        </div>
+        <div class="budget-field">
+          <label for="nights">Trip nights</label>
+          <input id="nights" type="number" min="1" value="3">
+        </div>
+
+        <div class="budget-field wide">
+          <label>From current location</label>
+          <div class="budget-inline">
+            <select id="fromSelect">
+              <option value="">Select existing route</option>
+            </select>
+            <input id="fromManual" type="text" placeholder="Manual from city">
+          </div>
+        </div>
+        <div class="budget-field wide">
+          <label>Destination</label>
+          <div class="budget-inline">
+            <select id="destinationSelect">
+              <option value="">Select destination</option>
+            </select>
+            <input id="destinationManual" type="text" placeholder="Manual destination">
+          </div>
+        </div>
+
+        <div class="budget-field full">
+          <label for="transportSelect">Transport from TouristiX</label>
+          <select id="transportSelect">
+            <option value="">Auto choose cheapest matching route</option>
+          </select>
+          <p class="budget-muted" id="transportHint">Select a route or type a manual ticket price.</p>
+        </div>
+        <div class="budget-field">
+          <label for="ticketCost">Ticket/person (BDT)</label>
+          <input id="ticketCost" type="number" min="0" value="0">
+        </div>
+        <div class="budget-field">
+          <label for="localDay">Local transport/day</label>
+          <input id="localDay" type="number" min="0" value="0">
+        </div>
+        <div class="budget-field">
+          <label for="mealsDay">Meals/person/day</label>
+          <input id="mealsDay" type="number" min="0" value="0">
+        </div>
+        <div class="budget-field">
+          <label for="activities">Activities/manual cost</label>
+          <input id="activities" type="number" min="0" value="0">
+        </div>
+
+        <div class="budget-field wide">
+          <label for="hotelSelect">Hotel from TouristiX</label>
+          <select id="hotelSelect">
+            <option value="">Auto choose matching hotel</option>
+          </select>
+        </div>
+        <div class="budget-field wide">
+          <label for="hotelNight">Hotel/night (BDT)</label>
+          <input id="hotelNight" type="number" min="0" value="0">
+        </div>
+
+        <div class="budget-field wide">
+          <label for="guideSelect">Tour guide from TouristiX</label>
+          <select id="guideSelect">
+            <option value="">No guide</option>
+          </select>
+        </div>
+        <div class="budget-field wide">
+          <label for="guideDay">Guide/day (BDT)</label>
+          <input id="guideDay" type="number" min="0" value="0">
+        </div>
+
+        <div class="budget-field wide">
+          <label for="packageSelect">Travel package from TouristiX</label>
+          <select id="packageSelect">
+            <option value="">No package</option>
+          </select>
+        </div>
+        <div class="budget-field wide">
+          <label for="packagePerson">Package/person (BDT)</label>
+          <input id="packagePerson" type="number" min="0" value="0">
+        </div>
+      </div>
+
+      <div class="budget-actions">
+        <button type="button" class="btn-primary" id="calculateBtn"><i class="fas fa-calculator"></i> Calculate</button>
+        <button type="button" class="btn-outline" id="smartFillBtn"><i class="fas fa-wand-magic-sparkles"></i> Smart Estimate</button>
+        <button type="reset" class="btn-outline"><i class="fas fa-rotate-left"></i> Reset</button>
+      </div>
+    </form>
+
+    <aside class="budget-panel budget-summary">
+      <h3><i class="fas fa-wallet"></i> Estimated Budget</h3>
+      <div class="budget-total">
+        <span>Total trip cost</span>
+        <strong id="totalCost">BDT 0</strong>
+      </div>
+      <div class="budget-breakdown">
+        <div class="budget-row"><span>Round-trip transport</span><strong id="transportCost">BDT 0</strong></div>
+        <div class="budget-row"><span>Hotel</span><strong id="hotelCost">BDT 0</strong></div>
+        <div class="budget-row"><span>Guide</span><strong id="guideCost">BDT 0</strong></div>
+        <div class="budget-row"><span>Meals</span><strong id="mealCost">BDT 0</strong></div>
+        <div class="budget-row"><span>Local transport</span><strong id="localCost">BDT 0</strong></div>
+        <div class="budget-row"><span>Spot entry + activities</span><strong id="activityCost">BDT 0</strong></div>
+        <div class="budget-row"><span>Package</span><strong id="packageCost">BDT 0</strong></div>
+        <div class="budget-row total-line"><span>Average per person</span><strong id="perPersonCost">BDT 0</strong></div>
+      </div>
+      <div class="budget-suggestion" id="tripSummary">Choose a destination to auto-fill matching TouristiX services.</div>
+      <div class="budget-links" id="budgetLinks"></div>
+    </aside>
+  </div>
+</section>
+
+<script>
+const bangladeshDistricts = [
+  'Bagerhat',
+  'Bandarban',
+  'Barguna',
+  'Barishal',
+  'Bhola',
+  'Bogura',
+  'Brahmanbaria',
+  'Chandpur',
+  'Chapainawabganj',
+  'Chattogram',
+  'Chuadanga',
+  'Cox\'s Bazar',
+  'Cumilla',
+  'Dhaka',
+  'Dinajpur',
+  'Faridpur',
+  'Feni',
+  'Gaibandha',
+  'Gazipur',
+  'Gopalganj',
+  'Habiganj',
+  'Jamalpur',
+  'Jashore',
+  'Jhalokati',
+  'Jhenaidah',
+  'Joypurhat',
+  'Khagrachhari',
+  'Khulna',
+  'Kishoreganj',
+  'Kurigram',
+  'Kushtia',
+  'Lakshmipur',
+  'Lalmonirhat',
+  'Madaripur',
+  'Magura',
+  'Manikganj',
+  'Meherpur',
+  'Moulvibazar',
+  'Munshiganj',
+  'Mymensingh',
+  'Naogaon',
+  'Narail',
+  'Narayanganj',
+  'Narsingdi',
+  'Natore',
+  'Netrokona',
+  'Nilphamari',
+  'Noakhali',
+  'Pabna',
+  'Panchagarh',
+  'Patuakhali',
+  'Pirojpur',
+  'Rajbari',
+  'Rajshahi',
+  'Rangamati',
+  'Rangpur',
+  'Satkhira',
+  'Shariatpur',
+  'Sherpur',
+  'Sirajganj',
+  'Sunamganj',
+  'Sylhet',
+  'Tangail',
+  'Thakurgaon'
+];
+
+const budgetData = <%- JSON.stringify({
+  spots: locals.spots || [],
+  hotels: locals.hotels || [],
+  guides: locals.guides || [],
+  transports: locals.transports || [],
+  packages: locals.packages || []
+}).replace(/</g, '\\u003c') %>;
+
+const els = {
+  tripType: document.getElementById('tripType'),
+  travelStyle: document.getElementById('travelStyle'),
+  adults: document.getElementById('adults'),
+  children: document.getElementById('children'),
+  nights: document.getElementById('nights'),
+  fromSelect: document.getElementById('fromSelect'),
+  fromManual: document.getElementById('fromManual'),
+  destinationSelect: document.getElementById('destinationSelect'),
+  destinationManual: document.getElementById('destinationManual'),
+  transportSelect: document.getElementById('transportSelect'),
+  ticketCost: document.getElementById('ticketCost'),
+  localDay: document.getElementById('localDay'),
+  mealsDay: document.getElementById('mealsDay'),
+  activities: document.getElementById('activities'),
+  hotelSelect: document.getElementById('hotelSelect'),
+  hotelNight: document.getElementById('hotelNight'),
+  guideSelect: document.getElementById('guideSelect'),
+  guideDay: document.getElementById('guideDay'),
+  packageSelect: document.getElementById('packageSelect'),
+  packagePerson: document.getElementById('packagePerson')
+};
+
+const dirty = {
+  ticket: false,
+  hotel: false,
+  guide: false,
+  package: false,
+  meals: false,
+  local: false,
+  activities: false
+};
+
+const styleDefaults = {
+  budget: { meals: 450, local: 600 },
+  standard: { meals: 750, local: 1000 },
+  premium: { meals: 1300, local: 1800 },
+  manual: { meals: 0, local: 0 }
+};
+
+function uniqueSorted(values) {
+  return Array.from(new Set(values.map(v => String(v || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+}
+
+function option(text, value, meta) {
+  const opt = document.createElement('option');
+  opt.textContent = text;
+  opt.value = value;
+  if (meta) Object.entries(meta).forEach(([key, val]) => opt.dataset[key] = val);
+  return opt;
+}
+
+function money(amount) {
+  return `BDT ${Math.max(0, Math.round(amount || 0)).toLocaleString()}`;
+}
+
+function numberValue(input, fallback) {
+  const value = Number(input.value);
+  return Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+function normalized(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function currentFrom() {
+  return els.fromManual.value.trim() || els.fromSelect.value.trim();
+}
+
+function currentDestination() {
+  return els.destinationManual.value.trim() || els.destinationSelect.value.trim();
+}
+
+function matchesDestination(text, destination) {
+  const a = normalized(text);
+  const b = normalized(destination);
+  return !b || a.includes(b) || b.includes(a);
+}
+
+function selectedOption(selectEl) {
+  return selectEl.options[selectEl.selectedIndex] || null;
+}
+
+function setInputValue(inputEl, value, dirtyKey) {
+  inputEl.value = Math.max(0, Math.round(Number(value || 0)));
+  if (dirtyKey) dirty[dirtyKey] = false;
+}
+
+function matchingEntryFee(destination) {
+  return budgetData.spots
+    .filter(s => destination && (matchesDestination(s.district, destination) || matchesDestination(s.name, destination)))
+    .reduce((sum, spot) => sum + Number(spot.entry_fee || 0), 0);
+}
+
+function populateStaticOptions() {
+  uniqueSorted([
+    ...bangladeshDistricts,
+    ...budgetData.transports.map(t => t.from_location)
+  ]).forEach(city => {
+    els.fromSelect.appendChild(option(city, city));
+  });
+
+  const destinations = uniqueSorted([
+    ...budgetData.spots.map(s => s.district),
+    ...budgetData.spots.map(s => s.name),
+    ...budgetData.hotels.map(h => h.district),
+    ...budgetData.transports.map(t => t.to_location),
+    ...budgetData.packages.map(p => p.destination)
+  ]);
+  destinations.forEach(dest => els.destinationSelect.appendChild(option(dest, dest)));
+
+  budgetData.guides.forEach(guide => {
+    els.guideSelect.appendChild(option(
+      `${guide.name} - ${guide.specialty || 'Tour Guide'} (${money(guide.price_per_day)}/day)`,
+      String(guide.id),
+      { price: guide.price_per_day || 0 }
+    ));
+  });
+}
+
+function refreshServiceOptions(autoPick) {
+  const from = currentFrom();
+  const destination = currentDestination();
+  const selectedTransport = els.transportSelect.value;
+  const selectedHotel = els.hotelSelect.value;
+  const selectedPackage = els.packageSelect.value;
+
+  els.transportSelect.innerHTML = '<option value="">Auto choose cheapest matching route</option>';
+  const matchingTransports = budgetData.transports.filter(t => {
+    const fromOk = !from || matchesDestination(t.from_location, from);
+    const toOk = !destination || matchesDestination(t.to_location, destination);
+    return fromOk && toOk;
+  }).sort((a, b) => Number(a.price || 0) - Number(b.price || 0));
+  matchingTransports.forEach(t => {
+    els.transportSelect.appendChild(option(
+      `${t.company || t.type} - ${t.from_location} to ${t.to_location} (${money(t.price)})`,
+      String(t.id),
+      { price: t.price || 0, from: t.from_location, to: t.to_location }
+    ));
+  });
+
+  els.hotelSelect.innerHTML = '<option value="">Auto choose matching hotel</option>';
+  const matchingHotels = budgetData.hotels.filter(h => {
+    return !destination || matchesDestination(h.district, destination) || matchesDestination(h.location, destination);
+  }).sort((a, b) => Number(a.price_per_night || 0) - Number(b.price_per_night || 0));
+  matchingHotels.forEach(h => {
+    els.hotelSelect.appendChild(option(
+      `${h.name} - ${h.district} (${money(h.price_per_night)}/night)`,
+      String(h.id),
+      { price: h.price_per_night || 0, district: h.district }
+    ));
+  });
+
+  els.packageSelect.innerHTML = '<option value="">No package</option>';
+  const matchingPackages = budgetData.packages.filter(p => {
+    return !destination || matchesDestination(p.destination, destination) || matchesDestination(p.name, destination);
+  }).sort((a, b) => Number(a.price || 0) - Number(b.price || 0));
+  matchingPackages.forEach(p => {
+    els.packageSelect.appendChild(option(
+      `${p.name} - ${p.destination} (${money(p.price)}/person)`,
+      String(p.id),
+      { price: p.price || 0, destination: p.destination }
+    ));
+  });
+
+  if (selectedTransport && Array.from(els.transportSelect.options).some(o => o.value === selectedTransport)) els.transportSelect.value = selectedTransport;
+  if (selectedHotel && Array.from(els.hotelSelect.options).some(o => o.value === selectedHotel)) els.hotelSelect.value = selectedHotel;
+  if (selectedPackage && Array.from(els.packageSelect.options).some(o => o.value === selectedPackage)) els.packageSelect.value = selectedPackage;
+
+  document.getElementById('routeCount').textContent = `Routes: ${matchingTransports.length}`;
+  document.getElementById('hotelCount').textContent = `Hotels: ${matchingHotels.length}`;
+  document.getElementById('packageCount').textContent = `Packages: ${matchingPackages.length}`;
+  const entryFee = matchingEntryFee(destination);
+  document.getElementById('entryFeeHint').textContent = `Entry fees: ${money(entryFee)}`;
+  document.getElementById('transportHint').textContent = matchingTransports.length
+    ? `${matchingTransports.length} matching route(s) found. Cheapest route can be used automatically.`
+    : 'No matching TouristiX route found. Enter a manual ticket price.';
+
+  if (autoPick && destination) {
+    if (matchingTransports[0] && !dirty.ticket) {
+      els.transportSelect.value = String(matchingTransports[0].id);
+      setInputValue(els.ticketCost, matchingTransports[0].price || 0, 'ticket');
+    }
+    if (matchingHotels[0] && !dirty.hotel) {
+      els.hotelSelect.value = String(matchingHotels[0].id);
+      setInputValue(els.hotelNight, matchingHotels[0].price_per_night || 0, 'hotel');
+    }
+    if (entryFee > 0 && !dirty.activities) setInputValue(els.activities, entryFee, 'activities');
+  }
+}
+
+function applySelectedPrice(selectEl, inputEl, priceKey) {
+  const selected = selectedOption(selectEl);
+  if (selected && selected.dataset[priceKey]) inputEl.value = selected.dataset[priceKey];
+}
+
+function applyTravelStyle(force) {
+  const defaults = styleDefaults[els.travelStyle.value] || styleDefaults.manual;
+  if (force || !dirty.meals) setInputValue(els.mealsDay, defaults.meals, 'meals');
+  if (force || !dirty.local) setInputValue(els.localDay, defaults.local, 'local');
+}
+
+function hasAnyBudgetInput() {
+  return [
+    currentFrom(),
+    currentDestination(),
+    els.transportSelect.value,
+    els.hotelSelect.value,
+    els.guideSelect.value,
+    els.packageSelect.value,
+    els.ticketCost.value,
+    els.hotelNight.value,
+    els.guideDay.value,
+    els.packagePerson.value,
+    els.mealsDay.value,
+    els.localDay.value,
+    els.activities.value
+  ].some(value => Number(value) > 0 || String(value || '').trim());
+}
+
+function calculateBudget() {
+  const adults = Math.max(1, numberValue(els.adults, 1));
+  const children = numberValue(els.children, 0);
+  const nights = Math.max(1, numberValue(els.nights, 1));
+  const travelers = adults + children;
+  const mealTravelers = adults + (children * 0.6);
+  const days = nights + 1;
+
+  const ticketCost = numberValue(els.ticketCost, 0);
+  const hotelNight = numberValue(els.hotelNight, 0);
+  const guideDay = numberValue(els.guideDay, 0);
+  const packagePerson = numberValue(els.packagePerson, 0);
+  const mealsDay = numberValue(els.mealsDay, 0);
+  const localDay = numberValue(els.localDay, 0);
+  const activities = numberValue(els.activities, 0);
+
+  const transportCost = ticketCost * travelers * 2;
+  const hotelCost = hotelNight * nights;
+  const guideCost = guideDay * days;
+  const packageCost = packagePerson * travelers;
+  const mealCost = mealsDay * mealTravelers * days;
+  const localCost = localDay * days;
+  const total = transportCost + hotelCost + guideCost + packageCost + mealCost + localCost + activities;
+
+  document.getElementById('transportCost').textContent = money(transportCost);
+  document.getElementById('hotelCost').textContent = money(hotelCost);
+  document.getElementById('guideCost').textContent = money(guideCost);
+  document.getElementById('packageCost').textContent = money(packageCost);
+  document.getElementById('mealCost').textContent = money(mealCost);
+  document.getElementById('localCost').textContent = money(localCost);
+  document.getElementById('activityCost').textContent = money(activities);
+  document.getElementById('totalCost').textContent = money(total);
+  document.getElementById('perPersonCost').textContent = money(total / travelers);
+
+  const from = currentFrom() || 'your location';
+  const destination = currentDestination() || 'destination';
+  const selectedTransport = selectedOption(els.transportSelect);
+  const selectedHotel = selectedOption(els.hotelSelect);
+  const selectedGuide = selectedOption(els.guideSelect);
+  const selectedPackage = selectedOption(els.packageSelect);
+  const selectedNames = [
+    selectedTransport && selectedTransport.value ? selectedTransport.textContent : '',
+    selectedHotel && selectedHotel.value ? selectedHotel.textContent : '',
+    selectedGuide && selectedGuide.value ? selectedGuide.textContent : '',
+    selectedPackage && selectedPackage.value ? selectedPackage.textContent : ''
+  ].filter(Boolean);
+  document.getElementById('tripSummary').classList.toggle('budget-warning', !hasAnyBudgetInput());
+  document.getElementById('tripSummary').textContent = hasAnyBudgetInput()
+    ? `${travelers} traveler(s), ${nights} night(s), ${from} to ${destination}. Transport is estimated as round trip.${selectedNames.length ? ' Selected: ' + selectedNames.join(' | ') : ''}`
+    : 'Your budget is BDT 0. Select a destination, service, or manual cost to start calculating.';
+
+  const links = [];
+  if (destination) {
+    links.push(`<a href="/transport?to=${encodeURIComponent(destination)}">View transport</a>`);
+    links.push(`<a href="/hotels?district=${encodeURIComponent(destination)}">View hotels</a>`);
+    links.push(`<a href="/spots?search=${encodeURIComponent(destination)}">View spots</a>`);
+  }
+  links.push('<a href="/guides">View guides</a>');
+  links.push('<a href="/packages">View packages</a>');
+  document.getElementById('budgetLinks').innerHTML = links.join('');
+}
+
+populateStaticOptions();
+refreshServiceOptions(false);
+calculateBudget();
+
+els.fromSelect.addEventListener('change', () => {
+  if (els.fromSelect.value) els.fromManual.value = '';
+  refreshServiceOptions(true);
+  calculateBudget();
+});
+
+els.destinationSelect.addEventListener('change', () => {
+  if (els.destinationSelect.value) els.destinationManual.value = '';
+  refreshServiceOptions(true);
+  calculateBudget();
+});
+
+els.fromManual.addEventListener('input', () => {
+  if (els.fromManual.value.trim()) els.fromSelect.value = '';
+  refreshServiceOptions(true);
+  calculateBudget();
+});
+
+els.destinationManual.addEventListener('input', () => {
+  if (els.destinationManual.value.trim()) els.destinationSelect.value = '';
+  refreshServiceOptions(true);
+  calculateBudget();
+});
+
+els.transportSelect.addEventListener('change', () => {
+  applySelectedPrice(els.transportSelect, els.ticketCost, 'price');
+  dirty.ticket = false;
+  calculateBudget();
+});
+els.hotelSelect.addEventListener('change', () => {
+  applySelectedPrice(els.hotelSelect, els.hotelNight, 'price');
+  dirty.hotel = false;
+  calculateBudget();
+});
+els.guideSelect.addEventListener('change', () => {
+  if (els.guideSelect.value) {
+    applySelectedPrice(els.guideSelect, els.guideDay, 'price');
+  } else {
+    setInputValue(els.guideDay, 0, 'guide');
+  }
+  dirty.guide = false;
+  calculateBudget();
+});
+els.packageSelect.addEventListener('change', () => {
+  if (els.packageSelect.value) {
+    applySelectedPrice(els.packageSelect, els.packagePerson, 'price');
+  } else {
+    setInputValue(els.packagePerson, 0, 'package');
+  }
+  dirty.package = false;
+  if (els.packageSelect.value && !dirty.hotel) setInputValue(els.hotelNight, 0, 'hotel');
+  if (els.packageSelect.value && !dirty.guide) setInputValue(els.guideDay, 0, 'guide');
+  calculateBudget();
+});
+
+[
+  ['ticketCost', 'ticket'],
+  ['hotelNight', 'hotel'],
+  ['guideDay', 'guide'],
+  ['packagePerson', 'package'],
+  ['mealsDay', 'meals'],
+  ['localDay', 'local'],
+  ['activities', 'activities']
+].forEach(([id, key]) => {
+  els[id].addEventListener('input', () => {
+    dirty[key] = true;
+    calculateBudget();
+  });
+});
+
+['tripType', 'adults', 'children', 'nights'].forEach(id => {
+  els[id].addEventListener('input', calculateBudget);
+  els[id].addEventListener('change', calculateBudget);
+});
+
+els.travelStyle.addEventListener('change', () => {
+  applyTravelStyle(true);
+  calculateBudget();
+});
+
+document.getElementById('calculateBtn').addEventListener('click', calculateBudget);
+document.getElementById('smartFillBtn').addEventListener('click', () => {
+  dirty.ticket = false;
+  dirty.hotel = false;
+  dirty.activities = false;
+  applyTravelStyle(true);
+  refreshServiceOptions(true);
+  calculateBudget();
+});
+document.getElementById('budgetForm').addEventListener('reset', () => {
+  setTimeout(() => {
+    Object.keys(dirty).forEach(key => dirty[key] = false);
+    refreshServiceOptions(false);
+    calculateBudget();
+  }, 0);
+});
+</script>
+
+<%- include('../partials/footer') %>

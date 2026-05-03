@@ -1,0 +1,308 @@
+<%- include('../partials/header') %>
+
+<style>
+.chat-page {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 20px;
+  min-height: calc(100vh - 170px);
+}
+.chat-panel {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+  overflow: hidden;
+}
+.chat-inbox-head,
+.chat-room-head {
+  padding: 18px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.chat-inbox-head h2,
+.chat-room-head h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1.15rem;
+}
+.chat-thread-list {
+  max-height: 680px;
+  overflow-y: auto;
+}
+.chat-thread {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 11px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #edf2f7;
+  align-items: center;
+  color: inherit;
+}
+.chat-thread:hover,
+.chat-thread.active {
+  background: #ecfdf3;
+}
+.chat-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #d1fae5;
+  color: #047857;
+  font-size: 1.05rem;
+}
+.chat-thread h3 {
+  margin: 0;
+  font-size: 0.94rem;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-thread p {
+  margin: 3px 0 0;
+  color: #64748b;
+  font-size: 0.82rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-thread-side {
+  text-align: right;
+}
+.chat-time {
+  display: block;
+  color: #94a3b8;
+  font-size: 0.72rem;
+  margin-bottom: 5px;
+}
+.chat-unread {
+  display: inline-flex;
+  min-width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 0 6px;
+}
+.chat-room {
+  display: flex;
+  flex-direction: column;
+  min-height: 680px;
+}
+.chat-room-subtitle {
+  color: #64748b;
+  font-size: 0.86rem;
+  margin-top: 3px;
+}
+.chat-messages {
+  flex: 1;
+  padding: 18px;
+  overflow-y: auto;
+  background: #f8fafc;
+}
+.chat-empty-room {
+  height: 100%;
+  min-height: 360px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #64748b;
+  padding: 30px;
+}
+.chat-msg {
+  display: flex;
+  margin-bottom: 12px;
+}
+.chat-msg.mine {
+  justify-content: flex-end;
+}
+.chat-msg-bubble {
+  max-width: min(620px, 78%);
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: #fff;
+  color: #1e293b;
+}
+.chat-msg.mine .chat-msg-bubble {
+  background: #059669;
+  border-color: #059669;
+  color: #fff;
+}
+.chat-msg-meta {
+  font-size: 0.72rem;
+  font-weight: 800;
+  opacity: 0.82;
+  margin-bottom: 4px;
+}
+.chat-msg-bubble p {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.45;
+  font-size: 0.92rem;
+}
+.chat-msg-bubble small {
+  display: block;
+  margin-top: 5px;
+  opacity: 0.72;
+  font-size: 0.72rem;
+}
+.chat-compose {
+  border-top: 1px solid #e2e8f0;
+  padding: 14px;
+  background: #fff;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+.chat-compose textarea {
+  min-height: 48px;
+  max-height: 140px;
+  resize: vertical;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 12px;
+  outline: none;
+  font: inherit;
+}
+.chat-compose textarea:focus {
+  border-color: #059669;
+  box-shadow: 0 0 0 3px rgba(5,150,105,0.12);
+}
+.chat-service-pill {
+  color: #047857;
+  background: #ecfdf3;
+  border: 1px solid #a7f3d0;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+@media (max-width: 900px) {
+  .chat-page {
+    grid-template-columns: 1fr;
+  }
+  .chat-room {
+    min-height: 560px;
+  }
+}
+</style>
+
+<section class="section">
+  <div class="container">
+    <% if (locals.success_msg && success_msg.length) { %>
+      <div class="alert alert-success"><%= success_msg[0] %></div>
+    <% } %>
+    <% if (locals.error_msg && error_msg.length) { %>
+      <div class="alert alert-danger"><%= error_msg[0] %></div>
+    <% } %>
+
+    <div class="chat-page">
+      <aside class="chat-panel">
+        <div class="chat-inbox-head">
+          <h2><i class="fas fa-comments"></i> Chat Inbox</h2>
+          <% if ((unreadChatCount || 0) > 0) { %>
+            <span class="chat-unread"><%= unreadChatCount %></span>
+          <% } %>
+        </div>
+        <div class="chat-thread-list">
+          <% if (!(threads || []).length) { %>
+            <div class="chat-empty-room">
+              <div>
+                <h3>No conversations yet</h3>
+                <p>Start from a hotel, guide, or transport page.</p>
+              </div>
+            </div>
+          <% } %>
+          <% (threads || []).forEach(t => { %>
+            <% const isActive = activeThread && activeThread.serviceType === t.service_type && String(activeThread.itemId) === String(t.item_id) && String(activeThread.threadUserId) === String(t.thread_user_id); %>
+            <a class="chat-thread <%= isActive ? 'active' : '' %>" href="/chat?type=<%= encodeURIComponent(t.service_type) %>&item=<%= encodeURIComponent(t.item_id) %>&user=<%= encodeURIComponent(t.thread_user_id) %>">
+              <div class="chat-avatar"><i class="fas <%= t.icon %>"></i></div>
+              <div>
+                <h3><%= t.service_name %></h3>
+                <p><%= ['owner_hotel','owner_transport','owner_guide'].includes(user.role) ? t.customer_name + ': ' : '' %><%= t.last_message || 'No message' %></p>
+              </div>
+              <div class="chat-thread-side">
+                <span class="chat-time"><%= t.last_at ? new Date(t.last_at).toLocaleDateString() : '' %></span>
+                <% if ((t.unread_count || 0) > 0) { %>
+                  <span class="chat-unread"><%= t.unread_count %></span>
+                <% } %>
+              </div>
+            </a>
+          <% }) %>
+        </div>
+      </aside>
+
+      <section class="chat-panel chat-room">
+        <% if (!activeThread) { %>
+          <div class="chat-empty-room">
+            <div>
+              <h2><i class="fas fa-message"></i> Select a conversation</h2>
+              <p>All hotel, guide, and transport conversations will appear here.</p>
+            </div>
+          </div>
+        <% } else { %>
+          <div class="chat-room-head">
+            <div style="display:flex; align-items:center; gap:12px;">
+              <div class="chat-avatar"><i class="fas <%= activeThread.icon %>"></i></div>
+              <div>
+                <h2><%= activeThread.item.chat_name %></h2>
+                <div class="chat-room-subtitle"><%= activeThread.item.chat_subtitle %></div>
+              </div>
+            </div>
+            <span class="chat-service-pill"><%= activeThread.serviceType %></span>
+          </div>
+
+          <div class="chat-messages" id="chatMessages">
+            <% if (!(activeThread.messages || []).length) { %>
+              <div class="chat-empty-room">
+                <div>
+                  <h3>Start the conversation</h3>
+                  <p>Send a message and it will stay in this chat inbox.</p>
+                </div>
+              </div>
+            <% } %>
+            <% (activeThread.messages || []).forEach(m => { %>
+              <% const mine = ['owner_hotel','owner_transport','owner_guide'].includes(user.role) ? m.sender_role !== 'user' : m.sender_role === 'user'; %>
+              <div class="chat-msg <%= mine ? 'mine' : '' %>">
+                <div class="chat-msg-bubble">
+                  <div class="chat-msg-meta"><%= mine ? 'You' : (['owner_hotel','owner_transport','owner_guide'].includes(user.role) ? m.customer_name : activeThread.item.chat_name) %></div>
+                  <p><%= m.message %></p>
+                  <small><%= new Date(m.created_at).toLocaleString() %></small>
+                </div>
+              </div>
+            <% }) %>
+          </div>
+
+          <form class="chat-compose" action="/chat/send" method="POST">
+            <input type="hidden" name="service_type" value="<%= activeThread.serviceType %>">
+            <input type="hidden" name="item_id" value="<%= activeThread.itemId %>">
+            <input type="hidden" name="thread_user_id" value="<%= activeThread.threadUserId %>">
+            <textarea name="message" placeholder="Type your message..." required></textarea>
+            <button type="submit" class="btn-primary"><i class="fas fa-paper-plane"></i> Send</button>
+          </form>
+        <% } %>
+      </section>
+    </div>
+  </div>
+</section>
+
+<script>
+const chatMessages = document.getElementById('chatMessages');
+if (chatMessages) chatMessages.scrollTop = chatMessages.scrollHeight;
+</script>
+
+<%- include('../partials/footer') %>

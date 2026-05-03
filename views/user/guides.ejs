@@ -25,7 +25,7 @@
             <div class="guide-actions">
               <a href="/guides/<%= g.id %>" class="btn-outline">Profile</a>
               <% if (locals.user) { %>
-              <a href="/guides/<%= g.id %>/chat" class="btn-outline">Chat</a>
+              <a href="/chat?type=guide&item=<%= g.id %>" class="btn-outline">Chat</a>
               <% } else { %>
               <a href="/auth/login" class="btn-outline">Login to Chat</a>
               <% } %>

@@ -158,6 +158,7 @@
 
 <section class="section">
   <div class="container transport-page">
+    <% const currentTab = locals.activeTab || 'panel-available'; %>
     <% const listReturn = '/transport'
       + (locals.from ? ('?from=' + encodeURIComponent(locals.from)) : '')
       + (locals.to ? (locals.from ? '&' : '?') + ('to=' + encodeURIComponent(locals.to)) : '')
@@ -192,27 +193,27 @@
       </div>
 
       <div class="section-tabs" id="transportTabs">
-        <button type="button" class="section-tab active" data-target="panel-available">
+        <button type="button" class="section-tab <%= currentTab === 'panel-available' ? 'active' : '' %>" data-target="panel-available">
           Available Tickets <span class="count"><%= (transports || []).length %></span>
         </button>
-        <button type="button" class="section-tab" data-target="panel-tickets">
+        <button type="button" class="section-tab <%= currentTab === 'panel-tickets' ? 'active' : '' %>" data-target="panel-tickets">
           My Tickets <span class="count"><%= (myTransportTickets || []).length %></span>
         </button>
-        <button type="button" class="section-tab" data-target="panel-incoming">
+        <button type="button" class="section-tab <%= currentTab === 'panel-incoming' ? 'active' : '' %>" data-target="panel-incoming">
           Incoming Requests <span class="count"><%= (incomingExchangeRequests || []).length %></span>
         </button>
-        <button type="button" class="section-tab" data-target="panel-released">
+        <button type="button" class="section-tab <%= currentTab === 'panel-released' ? 'active' : '' %>" data-target="panel-released">
           Released Exchange <span class="count"><%= (releasedTickets || []).length %></span>
         </button>
-        <button type="button" class="section-tab" data-target="panel-myrequests">
+        <button type="button" class="section-tab <%= currentTab === 'panel-myrequests' ? 'active' : '' %>" data-target="panel-myrequests">
           My Requests <span class="count"><%= (myExchangeRequests || []).length %></span>
         </button>
       </div>
 
-      <div class="exchange-section section-panel" id="panel-tickets">
+      <div class="exchange-section section-panel <%= currentTab === 'panel-tickets' ? 'active' : '' %>" id="panel-tickets">
         <div class="exchange-title-row">
           <h3><i class="fas fa-ticket"></i> My Transport Tickets</h3>
-          <small>Only confirmed tickets can be released. Exchange window: within 3 days and before 3 hours of departure.</small>
+          <small>Only confirmed tickets can be released. Exchange window: within 3 days and before 6 hours of departure.</small>
         </div>
 
         <% if ((myTransportTickets || []).length === 0) { %>
@@ -238,7 +239,7 @@
                         <%= ticket.exchange_open ? '' : 'disabled' %>
                         onclick="return confirm('Release this ticket for exchange?')"
                       >
-                        Release Ticket
+                        Release
                       </button>
                     </form>
                   <% } %>
@@ -261,7 +262,7 @@
         <% } %>
       </div>
 
-      <div class="exchange-section section-panel" id="panel-incoming">
+      <div class="exchange-section section-panel <%= currentTab === 'panel-incoming' ? 'active' : '' %>" id="panel-incoming">
         <div class="exchange-title-row">
           <h3><i class="fas fa-user-check"></i> Incoming Exchange Requests</h3>
           <small>Only ticket owner can accept or reject request.</small>
@@ -295,10 +296,64 @@
         <% } %>
       </div>
 
-      <div class="exchange-section section-panel" id="panel-released">
+      <div class="exchange-section section-panel <%= currentTab === 'panel-released' ? 'active' : '' %>" id="panel-released">
         <div class="exchange-title-row">
           <h3><i class="fas fa-right-left"></i> Released Tickets Exchange</h3>
-          <small>Claim only within 3 days and before 3 hours of departure.</small>
+          <small>Release your own confirmed ticket or exchange another user's released ticket within 3 days and before 6 hours of departure.</small>
+        </div>
+
+        <div class="exchange-title-row" style="margin-top: 10px;">
+          <h3><i class="fas fa-ticket"></i> Release Your Ticket</h3>
+          <small>When the owner accepts a request, the held payment goes to the releaser wallet and the ticket is transferred automatically.</small>
+        </div>
+
+        <% const releasableTickets = (myTransportTickets || []).filter(ticket => ['confirmed', 'released'].includes(ticket.status)); %>
+        <% if (releasableTickets.length === 0) { %>
+          <p class="exchange-empty">You do not have any confirmed or released transport ticket available for exchange right now.</p>
+        <% } else { %>
+          <div class="ticket-exchange-list" style="margin-bottom: 18px;">
+            <% releasableTickets.forEach(ticket => { %>
+              <div class="ticket-exchange-card">
+                <div>
+                  <h4><%= ticket.item_name %></h4>
+                  <p><strong>Status:</strong> <%= ticket.status %> <%= ticket.exchange_locked ? '(Exchanged Ticket)' : '' %></p>
+                  <p><i class="fas fa-receipt"></i> Bought: <%= ticket.created_at %></p>
+                  <p><i class="fas fa-calendar"></i> Travel date: <%= ticket.check_in %></p>
+                  <p><i class="fas fa-clock"></i> Departure: <%= ticket.departure_time %></p>
+                  <p><i class="fas fa-users"></i> <%= ticket.persons %> ticket(s)</p>
+                </div>
+                <div class="ticket-exchange-actions">
+                  <span class="booking-price">BDT <%= (ticket.total_price || 0).toLocaleString() %></span>
+                  <% if (ticket.status === 'confirmed' && !ticket.exchange_locked) { %>
+                    <form action="/bookings/<%= ticket.id %>/release-ticket" method="POST">
+                      <button
+                        type="submit"
+                        class="btn-danger-sm"
+                        <%= ticket.exchange_open ? '' : 'disabled' %>
+                        onclick="return confirm('Release this ticket for exchange?')"
+                      >
+                        Release
+                      </button>
+                    </form>
+                  <% } %>
+                  <% if (ticket.status === 'released') { %>
+                    <small class="muted-text">This ticket is visible to other users for exchange requests</small>
+                  <% } %>
+                  <% if (!ticket.exchange_open && ticket.status === 'confirmed') { %>
+                    <small class="muted-text">Release window closed</small>
+                  <% } %>
+                  <% if (ticket.exchange_locked) { %>
+                    <small class="muted-text">This exchanged ticket is locked and cannot be released again</small>
+                  <% } %>
+                </div>
+              </div>
+            <% }) %>
+          </div>
+        <% } %>
+
+        <div class="exchange-title-row">
+          <h3><i class="fas fa-users"></i> Request A Released Ticket</h3>
+          <small>Send an exchange request to hold payment. The owner can accept it and the ticket will be exchanged.</small>
         </div>
 
         <% if ((releasedTickets || []).length === 0) { %>
@@ -323,7 +378,7 @@
                       <%= (ticket.exchange_open && !ticket.already_requested) ? '' : 'disabled' %>
                       onclick="return confirm('Send exchange request for this ticket?')"
                     >
-                      Request Ticket
+                      Exchange
                     </button>
                   </form>
                   <% if (ticket.already_requested) { %>
@@ -338,7 +393,7 @@
         <% } %>
       </div>
 
-      <div class="exchange-section section-panel" id="panel-myrequests">
+      <div class="exchange-section section-panel <%= currentTab === 'panel-myrequests' ? 'active' : '' %>" id="panel-myrequests">
         <div class="exchange-title-row">
           <h3><i class="fas fa-receipt"></i> My Exchange Requests</h3>
           <small>Track accepted/rejected requests and payment state.</small>
@@ -364,7 +419,7 @@
       </div>
     <% } %>
 
-    <div class="section-panel active" id="panel-available">
+    <div class="section-panel <%= currentTab === 'panel-available' ? 'active' : '' %>" id="panel-available">
       <div class="transport-list">
         <% transports.forEach(t => { %>
         <div class="transport-card enhanced">
@@ -423,6 +478,9 @@ if (tabWrap) {
     document.querySelectorAll('.section-panel').forEach(p => p.classList.remove('active'));
     const panel = document.getElementById(targetId);
     if (panel) panel.classList.add('active');
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', targetId);
+    window.history.replaceState({}, '', url.toString());
   });
 }
 </script>
